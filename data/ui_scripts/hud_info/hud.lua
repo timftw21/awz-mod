@@ -1,78 +1,53 @@
-local mphud = require("LUI.mp_hud.MPHud")
 local barheight = 18
 local textheight = 13
 local textoffsety = barheight / 2 - textheight / 2
+local backgroundmaterial = Engine.InFrontend() and "distort_fe_bkgnd_ui_blur_mip0" or "distort_hud_bkgnd_ui_blur"
 
-function createinfobar()
+local function createinfobar()
 	local infobar = LUI.UIElement.new({
 		left = 180,
 		top = 5,
 		height = barheight,
-		width = 70,
+		width = 195,
 		leftAnchor = true,
 		topAnchor = true
-	})
-
-	infobar:registerAnimationState("hud_on", {
-		alpha = 1
-	})
-
-	infobar:registerAnimationState("hud_off", {
-		alpha = 0
 	})
 
 	return infobar
 end
 
-function populateinfobar(infobar)
-	elementoffset = 0
-
-	if (Engine.GetDvarBool("cg_infobar_fps")) then
-		infobar:addElement(infoelement({
-			label = "FPS: ",
-			getvalue = function()
-				return game:getfps()
-			end,
-			width = 70,
-			interval = 100
-		}))
-	end
-
-	if (Engine.GetDvarBool("cg_infobar_ping")) then
-		infobar:addElement(infoelement({
-			label = "Latency: ",
-			getvalue = function()
-				return game:getping() .. " ms"
-			end,
-			width = 115,
-			interval = 100
-		}))
-	end
-end
-
-function infoelement(data)
+local function infoelement(text, width)
 	local container = LUI.UIElement.new({
 		bottomAnchor = true,
 		leftAnchor = true,
 		topAnchor = true,
-		width = data.width,
-		left = elementoffset
+		rightAnchor = false,
+		top = 0,
+		bottom = 0,
+		width = width,
+		left = 0
 	})
-
-	elementoffset = elementoffset + data.width + 10
 
 	local background = LUI.UIImage.new({
 		bottomAnchor = true,
 		leftAnchor = true,
 		topAnchor = true,
 		rightAnchor = true,
+		left = 0,
+		right = 0,
+		top = 0,
+		bottom = 0,
 		color = {
 			r = 0.3,
 			g = 0.3,
 			b = 0.3,
 		},
-		material = RegisterMaterial("distort_hud_bkgnd_ui_blur")
+		-- Preserve s1-mod's blur and tint. Frontend panels sample the menu target.
+		material = RegisterMaterial(backgroundmaterial)
 	})
+	if Engine.InFrontend() then
+		background:setupTiles(256)
+	end
 
 	local labelfont = RegisterFont("fonts/bodyFontBold", textheight)
 
@@ -90,9 +65,9 @@ function infoelement(data)
 		}
 	})
 
-	label:setText(data.label)
+	label:setText(text)
 
-	local _, _, left = GetTextDimensions(data.label, labelfont, textheight)
+	local _, _, left = GetTextDimensions(text, labelfont, textheight)
 	local value = LUI.UIText.new({
 		left = left + 5,
 		top = textoffsety,
@@ -107,57 +82,69 @@ function infoelement(data)
 		}
 	})
 
-	value:addElement(LUI.UITimer.new(data.interval, "update"))
-	value:setText(data.getvalue())
-	value:addEventHandler("update", function()
-		value:setText(data.getvalue())
-	end)
-
 	container:addElement(background)
 	container:addElement(label)
 	container:addElement(value)
 
-	return container
+	return container, value
 end
 
-local updatehudvisibility = mphud.updateHudVisibility
-mphud.updateHudVisibility = function(a1, a2)
-	updatehudvisibility(a1, a2)
-
-	local root = Engine.GetLuiRoot()
-	local menus = root:AnyActiveMenusInStack()
-	local infobar = root.infobar
-
-	if (not infobar) then
+local function attachinfobar(root)
+	if root.awzInfobar then
 		return
 	end
 
-	if (menus) then
-		infobar:animateToState("hud_off")
-	else
-		infobar:animateToState("hud_on")
+	local infobar = createinfobar()
+	infobar.id = "awz_infobar"
+	infobar:setPriority(LUI.UIRoot.childPriorities.debugInfo)
+	root.awzInfobar = infobar
+	local fps, fpsvalue = infoelement("FPS: ", 70)
+	local ping, pingvalue = infoelement("Latency: ", 115)
+	infobar:addElement(fps)
+	infobar:addElement(ping)
+	local previousfps, previousping, previousavailable
+	local function update()
+		local showfps = Engine.GetDvarBool("cg_infobar_fps")
+		local showping = Engine.GetDvarBool("cg_infobar_ping")
+		if showfps ~= previousfps or showping ~= previousping then
+			fps:setAlpha(showfps and 1 or 0)
+			ping:setAlpha(showping and 1 or 0)
+			-- Set both edges without replacing the counter's vertical layout.
+			local left = showfps and 80 or 0
+			ping:setLeftRight(true, false, left, left + 115)
+			print(string.format("[HUD] Counters: FPS=%s, latency=%s; latency bounds=%d..%d, height=%d",
+				tostring(showfps), tostring(showping), left, left + 115, barheight))
+			previousfps, previousping = showfps, showping
+		end
+		if showfps then
+			fpsvalue:setText(tostring(game:getfps()))
+		end
+		if showping then
+			local latency = Engine.InFrontend() and -1 or game:getping()
+			local available = latency >= 0
+			pingvalue:setText(available and (latency .. " ms") or "N/A")
+			if available ~= previousavailable then
+				print("[HUD] Server latency " .. (available and "available" or "unavailable (no active game server)"))
+				previousavailable = available
+			end
+		end
 	end
+	infobar:registerEventHandler("awz_infobar_update", update)
+	root:registerEventHandler("update_hud_infobar_settings", update)
+	infobar:addElement(LUI.UITimer.new(100, "awz_infobar_update"))
+	root:addElement(infobar)
+	update()
+	print("[HUD] Counter overlay attached to UI root: " .. tostring(root.name) .. "; background=" .. backgroundmaterial .. ", original tint=0.3")
 end
 
-local mphud = LUI.MenuBuilder.m_types_build["mp_hud"]
-LUI.MenuBuilder.m_types_build["mp_hud"] = function()
-	local hud = mphud()
-
-	if (Engine.InFrontend()) then
-		return hud
-	end
-
-	local infobar = createinfobar()
-	local root = Engine.GetLuiRoot()
-	root.infobar = infobar
-	populateinfobar(infobar)
-
-	root:registerEventHandler("update_hud_infobar_settings", function()
-		infobar:removeAllChildren()
-		populateinfobar(infobar)
-	end)
-
-	hud.static:addElement(infobar)
-
-	return hud
+-- The root survives menu and HUD changes. Cover both existing roots and future
+-- roots created after this script loads, including a fresh root after map changes.
+local newroot = LUI.UIRoot.new
+LUI.UIRoot.new = function(...)
+	local root = newroot(...)
+	attachinfobar(root)
+	return root
+end
+for _, root in pairs(LUI.roots) do
+	attachinfobar(root)
 end

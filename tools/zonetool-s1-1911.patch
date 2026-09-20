@@ -1,0 +1,31 @@
+--- a/src/zonetool/zonetool/s1/assets/tracerdef.hpp
++++ b/src/zonetool/zonetool/s1/assets/tracerdef.hpp
+@@ -15,6 +15,7 @@
+ 		void prepare(zone_buffer* buf, zone_memory* mem) override;
+ 		void load_depending(zone_base* zone) override;
+ 		void* pointer() override { return asset_; }
++		bool referenced() override { return name_.starts_with(","); }
+ 		std::string name() override;
+ 		std::int32_t type() override;
+ 		void write(zone_base* zone, zone_buffer* buffer) override;
+--- a/src/zonetool/zonetool/s1/assets/tracerdef.cpp
++++ b/src/zonetool/zonetool/s1/assets/tracerdef.cpp
+@@ -32,6 +32,7 @@
+ 		{
+ 			this->asset_ = mem->allocate<typename std::remove_reference<decltype(*this->asset_)>::type>();
+ 			this->asset_->name = mem->duplicate_string(name);
++			return;
+ 		}
+ 		this->asset_ = this->parse(name, mem);
+ 		if (!this->asset_)
+--- a/src/zonetool/zonetool/s1/assets/weapondef.cpp
++++ b/src/zonetool/zonetool/s1/assets/weapondef.cpp
+@@ -1550,6 +1550,8 @@
+ 				zone->get_asset_pointer(ASSET_TYPE_MATERIAL, data->camoWorldModelMaterialOverride->name));
+ 		}
+ 
++		WEAPON_SUBASSET(camoViewModelMaterialOverride, ASSET_TYPE_MATERIAL, Material);
++
+ 		if (data->szXAnimsRightHanded)
+ 		{
+ 			buf->align(7);

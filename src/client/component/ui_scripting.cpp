@@ -10,6 +10,7 @@
 #include "console.hpp"
 #include "game_module.hpp"
 #include "fps.hpp"
+#include "solo.hpp"
 
 #include "game/ui_scripting/execution.hpp"
 
@@ -155,6 +156,13 @@ namespace ui_scripting
 			auto game_type = game();
 			lua["game"] = game_type;
 
+			game_type["issolo"] = [](const game&) { return solo::active(); };
+			game_type["beginsolo"] = [](const game&) { return solo::begin(); };
+			game_type["endsolo"] = [](const game&) { solo::leave(); };
+			game_type["sololobbyready"] = [](const game&) { solo::lobby_ready(); };
+			game_type["solomapavailable"] = [](const game&, const std::string& map) { return solo::map_available(map); };
+			game_type["startsolo"] = [](const game&, const std::string& map) { return solo::start(map); };
+
 			game_type["getfps"] = [](const game&)
 			{
 				return fps::get_fps();
@@ -162,6 +170,10 @@ namespace ui_scripting
 
 			game_type["getping"] = [](const game&)
 			{
+				if (!::game::CL_IsCgameInitialized() || ::game::VirtualLobby_Loaded())
+				{
+					return -1;
+				}
 				return *::game::mp::ping;
 			};
 

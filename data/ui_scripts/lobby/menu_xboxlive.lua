@@ -47,6 +47,11 @@ function menu_xboxlive(a1, a2)
 	serverListButton:setDisabledRefreshRate(500)
 
 	-- private match button
+	if Engine.IsZombiesMode() then
+		local soloButton = menu:AddButton("@AWZ_SOLO", AWZSolo.Open)
+		soloButton:rename("menu_xboxlive_solo")
+	end
+
 	privateMatchButton = menu:AddButton("@MENU_PRIVATE_MATCH", MPLobbyOnline.OnPrivateMatch,
 		MPLobbyOnline.disablePrivateMatchButton)
 	privateMatchButton:rename("menu_xboxlive_private_match")

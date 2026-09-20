@@ -6,6 +6,7 @@
 #include "localized_strings.hpp"
 #include "scheduler.hpp"
 #include "dvars.hpp"
+#include "console.hpp"
 
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
@@ -16,6 +17,7 @@ namespace branding
 {
 	namespace
 	{
+		constexpr auto version_display = "AWZ-MOD 0.1";
 		utils::hook::detour ui_get_formatted_build_number_hook;
 
 		const char* ui_get_formatted_build_number_stub()
@@ -48,6 +50,7 @@ namespace branding
 				SELECT_VALUE(0x14035B3F0, 0x1404A8950), ui_get_formatted_build_number_stub);
 
 			dvars::ui_showBranding = game::Dvar_RegisterBool("ui_showBranding", false, game::DVAR_FLAG_SAVED);
+			console::info("[Branding] Version display: %s\n", version_display);
 
 			scheduler::loop([]()
 			{
@@ -61,7 +64,7 @@ namespace branding
 				const auto y = 4;
 				const auto scale = 1.0f;
 				float color[4] = {0.666f, 0.666f, 0.666f, 0.666f};
-				const auto* text = "s1-mod: " VERSION;
+				const auto* text = version_display;
 
 				auto* font = game::R_RegisterFont("fonts/consolefont");
 

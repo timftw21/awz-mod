@@ -8,6 +8,7 @@
 #include "network.hpp"
 #include "party.hpp"
 #include "scheduler.hpp"
+#include "solo.hpp"
 
 #include <utils/cryptography.hpp>
 #include <utils/string.hpp>
@@ -59,7 +60,7 @@ namespace nat
 		// frontend menu, where SV_Loaded can also be true), and we're not a dedicated server.
 		bool is_hosting()
 		{
-			return game::SV_Loaded() && game::CL_IsCgameInitialized() && !game::environment::is_dedi();
+			return !solo::active() && game::SV_Loaded() && game::CL_IsCgameInitialized() && !game::environment::is_dedi();
 		}
 
 		// Blocking; async pipeline only.

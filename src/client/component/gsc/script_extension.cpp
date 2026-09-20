@@ -36,7 +36,12 @@ namespace gsc
 		bool force_error_print = false;
 		std::optional<std::string> gsc_error_msg;
 
-		std::unordered_map<std::uint32_t, game::BuiltinFunction> builtin_funcs_overrides;
+		struct builtin_override
+		{
+			game::BuiltinFunction replacement;
+			game::BuiltinFunction* original;
+		};
+		std::unordered_map<std::uint32_t, builtin_override> builtin_funcs_overrides;
 
 		utils::hook::detour scr_register_function_hook;
 
@@ -236,7 +241,11 @@ namespace gsc
 		{
 			if (const auto itr = builtin_funcs_overrides.find(name); itr != builtin_funcs_overrides.end())
 			{
-				func = itr->second;
+				if (itr->second.original)
+				{
+					*itr->second.original = reinterpret_cast<game::BuiltinFunction>(func);
+				}
+				func = itr->second.replacement;
 			}
 
 			scr_register_function_hook.invoke<void>(func, type, name);
@@ -330,10 +339,10 @@ namespace gsc
 		game::Scr_ErrorInternal();
 	}
 
-	void override_function(const std::string& name, game::BuiltinFunction func)
+	void override_function(const std::string& name, game::BuiltinFunction func, game::BuiltinFunction* original)
 	{
 		const auto id = gsc_ctx->func_id(name);
-		builtin_funcs_overrides.emplace(id, func);
+		builtin_funcs_overrides.emplace(id, builtin_override{func, original});
 	}
 
 	void add_function(const std::string& name, game::BuiltinFunction function)

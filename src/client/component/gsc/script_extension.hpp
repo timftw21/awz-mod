@@ -32,6 +32,6 @@ namespace gsc
 	void clear_devmap();
 
 	void scr_error(const char* error);
-	void override_function(const std::string& name, game::BuiltinFunction func);
+	void override_function(const std::string& name, game::BuiltinFunction func, game::BuiltinFunction* original = nullptr);
 	void add_function(const std::string& name, game::BuiltinFunction function);
 }

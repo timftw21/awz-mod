@@ -7,6 +7,7 @@
 #include "dvars.hpp"
 #include "network.hpp"
 #include "party.hpp"
+#include "solo.hpp"
 
 #include <utils/hook.hpp>
 #include <utils/string.hpp>
@@ -15,6 +16,16 @@ namespace network
 {
 	namespace
 	{
+		utils::hook::detour sys_get_packet_hook;
+
+		bool sys_get_packet_stub(game::netadr_s* address, game::msg_t* message)
+		{
+			// This is the socket receive path, separate from NET_GetLoopPacket.
+			// Continue draining the socket, but never deliver external traffic to Solo.
+			const auto received = sys_get_packet_hook.invoke<bool>(address, message);
+			return received && !solo::active();
+		}
+
 		std::unordered_map<std::string, callback>& get_callbacks()
 		{
 			static std::unordered_map<std::string, callback> callbacks{};
@@ -111,6 +122,7 @@ namespace network
 
 	int dw_send_to_stub(const int size, const char* src, game::netadr_s* a3)
 	{
+		if (solo::active()) return true; // Local client/server loopback never uses this socket path.
 		sockaddr s = {};
 		game::NetadrToSockadr(a3, &s);
 		return sendto(*game::query_socket, src, size, 0, &s, 16) >= 0;
@@ -251,6 +263,7 @@ namespace network
 				//utils::hook::jump(0x1404D850A, reinterpret_cast<void*>(0x1404D849A));
 				utils::hook::call(0x1404D851F, dw_send_to_stub);
 				utils::hook::jump(game::Sys_SendPacket, dw_send_to_stub);
+				sys_get_packet_hook.create(0x1404D8280, sys_get_packet_stub);
 
 				// intercept command handling
 				utils::hook::jump(0x14020A175, utils::hook::assemble(handle_command_stub), true);

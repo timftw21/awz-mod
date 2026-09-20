@@ -3,6 +3,7 @@
 #include "game/game.hpp"
 
 #include "scheduler.hpp"
+#include "fps.hpp"
 
 #include <utils/concurrency.hpp>
 #include <utils/hook.hpp>
@@ -106,8 +107,11 @@ namespace scheduler
 
 		void main_frame_stub()
 		{
+			fps::begin_frame();
 			execute(pipeline::main);
+			fps::end_main_callbacks();
 			game::Com_Frame_Try_Block_Function();
+			fps::end_frame();
 		}
 	}
 

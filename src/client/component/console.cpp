@@ -4,6 +4,7 @@
 
 #include "command.hpp"
 #include "console.hpp"
+#include "filesystem.hpp"
 #include "game_console.hpp"
 #include "rcon.hpp"
 #include "scheduler.hpp"
@@ -11,6 +12,7 @@
 #include <utils/concurrency.hpp>
 #include <utils/hook.hpp>
 #include <utils/thread.hpp>
+#include <version.hpp>
 
 namespace console
 {
@@ -21,6 +23,35 @@ namespace console
 
 		std::atomic_bool started_{false};
 		std::atomic_bool terminate_runner_{false};
+
+		bool write_log(const std::string& message)
+		{
+			static std::mutex mutex;
+			const std::lock_guard lock(mutex);
+			static auto stream = []
+			{
+				SYSTEMTIME time{};
+				GetLocalTime(&time);
+				const auto directory = std::filesystem::path(filesystem::get_binary_directory()) / "logs";
+				std::error_code error;
+				std::filesystem::create_directories(directory, error);
+				if (error) return std::ofstream{};
+				const auto filename = std::format("awz-client-{:04}{:02}{:02}-{:02}{:02}{:02}-{}.log",
+					time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute, time.wSecond,
+					GetCurrentProcessId());
+				return std::ofstream(directory / filename, std::ios::binary | std::ios::app);
+			}();
+
+			if (!stream) return false;
+			SYSTEMTIME time{};
+			GetLocalTime(&time);
+			stream << std::format("[{:02}:{:02}:{:02}.{:03}] ", time.wHour, time.wMinute, time.wSecond,
+				time.wMilliseconds) << message;
+			if (!message.ends_with('\n')) stream << '\n';
+			// Save immediately, even if the game crashes or closes before the console queue drains.
+			stream.flush();
+			return stream.good();
+		}
 
 		void print_message(const char* message)
 		{
@@ -45,11 +76,13 @@ namespace console
 			const auto count = vsnprintf(buffer, sizeof(buffer), message, *ap);
 
 			if (count < 0) return {};
-			return {buffer, static_cast<size_t>(count)};
+			return {buffer, std::min(static_cast<size_t>(count), sizeof(buffer) - 1)};
 		}
 
 		void dispatch_message(const int type, const std::string& message)
 		{
+			write_log(message);
+
 			if (rcon::message_redirect(message))
 			{
 				return;
@@ -91,6 +124,7 @@ namespace console
 			[[maybe_unused]] const auto res = vsnprintf(buffer, sizeof(buffer), fmt, ap);
 			va_end(ap);
 
+			write_log(buffer);
 			print_message(buffer);
 		}
 
@@ -122,6 +156,16 @@ namespace console
 			}
 		}
 
+		void post_start() override
+		{
+			const auto header = std::format("[awz-mod] Build {} ({}, {} {}), PID {}\n",
+				VERSION, GIT_HASH, __DATE__, __TIME__, GetCurrentProcessId());
+			if (!write_log(header))
+			{
+				console::warn("[awz-mod] Could not open the client log in the executable's logs directory\n");
+			}
+		}
+
 		void post_unpack() override
 		{
 			// Redirect input (]command)
@@ -138,7 +182,7 @@ namespace console
 
 			this->message_runner_ = utils::thread::create_named_thread("Console IO", []
 			{
-				while (!started_)
+				while (!started_ && !terminate_runner_)
 				{
 					std::this_thread::sleep_for(10ms);
 				}

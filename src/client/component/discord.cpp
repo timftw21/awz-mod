@@ -7,6 +7,7 @@
 #include "nat.hpp"
 #include "network.hpp"
 #include "party.hpp"
+#include "solo.hpp"
 #include "scheduler.hpp"
 
 #include <utils/string.hpp>
@@ -75,7 +76,7 @@ namespace discord
 
 		std::string get_join_address()
 		{
-			if (!game::CL_IsCgameInitialized())
+			if (solo::active() || !game::CL_IsCgameInitialized())
 			{
 				return {};
 			}
@@ -100,7 +101,7 @@ namespace discord
 		// on. The joined token precedes the address so a punched host is never mistaken for a dedi.
 		std::string get_match_id()
 		{
-			if (!game::CL_IsCgameInitialized())
+			if (solo::active() || !game::CL_IsCgameInitialized())
 			{
 				return {};
 			}
@@ -350,7 +351,12 @@ namespace discord
 				discord_presence.partySize = get_snapshot_player_count();
 
 				const auto* name_dvar = game::Dvar_FindVar("name");
-				if (name_dvar && host_name_storage == name_dvar->current.string) // host name == player name => private match
+				if (solo::active())
+				{
+					discord_presence.state = "Solo";
+					discord_presence.partyMax = 1;
+				}
+				else if (name_dvar && host_name_storage == name_dvar->current.string) // host name == player name => private match
 				{
 					discord_presence.state = "Private Match";
 					discord_presence.partyMax = game::Dvar_FindVar("sv_maxclients")->current.integer;

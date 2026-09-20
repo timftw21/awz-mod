@@ -54,7 +54,17 @@ if (builders and type(builders["mp_pause_menu"]) == "function") then
 	local original_build = builders["mp_pause_menu"]
 	builders["mp_pause_menu"] = function(...)
 		local menu = original_build(...)
-		if (menu and Engine.GetDvarBool("sv_running")) then
+		if menu and game:issolo() then
+			local button = menu.list:getFirstChild()
+			while button do
+				local next_button = button:getNextSibling()
+				if button.properties and button.properties.button_text == Engine.Localize("@LUA_MENU_MUTE_PLAYERS") then
+					button:close()
+				end
+				button = next_button
+			end
+		end
+		if (menu and Engine.GetDvarBool("sv_running") and not game:issolo()) then
 			pcall(function()
 				local button = menu:AddButton(friends_button_text(), on_toggle_friends)
 				if (button and button.rename) then

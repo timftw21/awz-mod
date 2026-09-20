@@ -256,10 +256,12 @@ namespace patches
 
 			// Fix mouse lag
 			utils::hook::nop(SELECT_VALUE(0x14038FAFF, 0x1404DB1AF), 6);
+			// Refresh the display idle timer periodically, not once per game frame.
 			scheduler::loop([]()
 			{
 				SetThreadExecutionState(ES_DISPLAY_REQUIRED);
-			}, scheduler::pipeline::main);
+			}, scheduler::pipeline::main, 10s);
+			console::info("[Performance] Display idle timer refresh: once per 10 seconds\n");
 
 			if (game::environment::is_sp())
 			{

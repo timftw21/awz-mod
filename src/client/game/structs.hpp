@@ -1185,7 +1185,8 @@ namespace game
 
 	struct StreamFileName
 	{
-		unsigned __int16 isLocalized;
+		bool isLocalized;
+		bool isStreamed;
 		unsigned __int16 fileIndex;
 		StreamFileInfo info;
 	};
@@ -1196,9 +1197,42 @@ namespace game
 		unsigned int totalMsec;
 	};
 
+	struct LoadedSoundInfo
+	{
+		char* data;
+		unsigned int sampleRate;
+		unsigned int dataByteCount;
+		unsigned int numSamples;
+		char channels;
+		char numBits;
+		char blockAlign;
+		short format;
+		int loadedSize;
+	};
+
+	struct LoadedSound
+	{
+		const char* name;
+		StreamFileName filename;
+		LoadedSoundInfo info;
+	};
+	static_assert(sizeof(LoadedSound) == 64);
+	static_assert(offsetof(LoadedSound, info) == 32);
+	static_assert(offsetof(LoadedSoundInfo, format) == 24);
+
+	struct PrimedSound
+	{
+		LoadedSound* loadedPart;
+		StreamFileName streamedPart;
+		int dataOffset;
+		int totalSize;
+	};
+
 	union SoundFileRef
 	{
+		LoadedSound* loadSnd;
 		StreamedSound streamSnd;
+		PrimedSound primedSnd;
 	};
 
 	struct SoundFile
@@ -1213,9 +1247,12 @@ namespace game
 		const char* aliasName;
 		char __pad0[24];
 		SoundFile* soundFile;
-		char __pad1[198];
+		char __pad1[52];
+		unsigned int flags;
+		char __pad2[142];
 		// not gonna map this out...
 	};
+	static_assert(offsetof(snd_alias_t, flags) == 92);
 
 	struct snd_alias_list_t
 	{
