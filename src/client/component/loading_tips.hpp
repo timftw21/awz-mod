@@ -33,7 +33,7 @@ namespace loading_tips
 			case 10: return "Turning on a ^3Power Station^7 awards ^3200 credits^7 before any Double Points bonus.";
 			case 11: return "Regular zombies cannot sprint before ^3round 15^7. In Classic, their sprint speed is ^330% below stock^7.";
 			case 12: return "Use ^3Traps^7 to thin out large groups of zombies, but keep clear of their damage.";
-			case 14: return "In ^3Classic^7, self-reviving removes all remaining perks. Buy your perks again after recovering.";
+			case 14: return "Going down in ^3Classic^7 removes all your perks. Buy your perks again after recovering.";
 			case 17: return "^3Orbital Drops^7 are disabled in Classic mode.";
 			case 22: return "After a Solo revive, zombies ignore you for ^3two seconds^7. Use that time to get clear.";
 			case 27: return "^3Classic^7 skips Survivor escort rounds on Infection.";

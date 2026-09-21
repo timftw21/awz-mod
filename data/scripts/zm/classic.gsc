@@ -17,13 +17,13 @@ main()
     replacefunc( maps\mp\gametypes\zombies::getroundintermissionduration, ::getroundintermissionduration );
     replacefunc( maps\mp\gametypes\zombies::onspawnfinished, ::onspawnfinished );
     replacefunc( maps\mp\zombies\_zombies_laststand::zombieslaststandweapon, ::zombieslaststandweapon );
+    replacefunc( maps\mp\zombies\_zombies_laststand::zombieperkbleed, ::remove_downed_perks );
     replacefunc( maps\mp\gametypes\zombies::calculateroundtype, ::calculateroundtype );
     replacefunc( maps\mp\zombies\zombies_spawn_manager::getenemytypetospawn, ::getenemytypetospawn );
     replacefunc( maps\mp\zombies\_terminals::getitemrequiresexo, ::getitemrequiresexo );
     replacefunc( maps\mp\zombies\_terminals::itemhasuses, ::itemhasuses );
     replacefunc( maps\mp\zombies\_terminals::perkterminaltriggerthink, ::perkterminaltriggerthink );
     replacefunc( maps\mp\zombies\_terminals::perkterminalsetexohealth, ::perkterminalsetexohealth );
-    replacefunc( maps\mp\zombies\_terminals::perkterminalsetexorevive, ::perkterminalsetexorevive );
     replacefunc( maps\mp\zombies\_terminals::perkterminalsetexostabilizer, ::perkterminalsetexostabilizer );
     replacefunc( maps\mp\zombies\_terminals::perkterminalsetexofastreload, ::perkterminalsetexofastreload );
     replacefunc( maps\mp\zombies\_terminals::perkterminalsetexotacticalarmor, ::perkterminalsetexotacticalarmor );
@@ -33,24 +33,27 @@ main()
     replacefunc( maps\mp\zombies\killstreaks\_zombie_killstreaks::dropcarepackage, ::disabled );
     replacefunc( maps\mp\zombies\zombie_generic::zombie_generic_think, ::zombie_generic_think );
     println( "[Classic] Enabled: no suit/Slam, suit-free perks, regular zombies/dogs, Mk5/Mk10=5000 each, quests disabled" );
-    println( "[Classic] Self-revive clears perks; orbital drops disabled; sprint=70%; team route spreading and idle wandering disabled" );
+    println( "[Classic] Downing removes perks with stock HUD effects; orbital drops disabled; sprint=70%; team route spreading and idle wandering disabled" );
 }
 
 // Use the stock removal listeners so perk effects, saved ammo and HUD order all
-// clear together. Called after revive cancels perk bleeding, before health restoration.
-remove_self_revive_perks()
+// clear together while downed. Medic must remain until stock useexostim starts
+// self-revival; that routine consumes Medic and plays its removal effect too.
+remove_downed_perks()
 {
     self endon( "death" );
     self endon( "disconnect" );
     level endon( "game_ended" );
-    maps\mp\zombies\_zombies_laststand::zombieperkbleedflashingstop();
     perks = self.zm_perks;
     foreach ( perk in perks )
-        self notify( "take_" + perk );
+    {
+        if ( perk != "exo_revive" )
+            self notify( "take_" + perk );
+    }
 
-    // Allow the notified removal listeners to finish before restoring health/weapons.
+    // Let the stock removal listeners and Medic consumption finish this frame.
     waitframe();
-    println( "[Classic] Self-revive perk cleanup: removed=" + perks.size + "; remaining=" + self.zm_perks.size + "; max health=" + self.maxhealth );
+    println( "[Classic] Downed perk cleanup: before=" + perks.size + "; remaining=" + self.zm_perks.size + "; laststand=" + self.inlaststand + "; max health=" + self.maxhealth );
 }
 
 zombie_generic_think()
@@ -322,28 +325,13 @@ perkterminaltriggerthink()
     thread maps\mp\zombies\_terminals::perkterminalupdatefx();
 }
 
-// Camouflage uses the UAV wrist device (killstreakTable.csv, weapon column 11).
-// Hold the flourish for one full second before restoring the player's weapon.
-// only play the flourish, never invoke the camouflage killstreak effect.
-perk_flourish( item )
-{
-    weapon = maps\mp\_utility::getkillstreakweapon( "zm_camouflage" );
-    println( "[Classic] Perk acquired: " + item + "; camouflage flourish=" + weapon + "; duration=1000ms" );
-    maps\mp\gametypes\zombies::playweaponflourish( weapon, 1.0 );
-}
-
-// Retain stock perk effects, with the same wrist-device flourish for each perk.
+// Grant/register the perk immediately; the cosmetic animation runs separately
+// so downing during playback still removes the newly bought perk.
 perkterminalsetexohealth( item, buyer )
 {
     self.maxhealth = 200;
     self.health = 200;
-    perk_flourish( item );
-}
-
-perkterminalsetexorevive( item, buyer )
-{
-    self.isexostimactive = 1;
-    perk_flourish( item );
+    thread scripts\zm\balance::perk_flourish( item );
 }
 
 perkterminalsetexostabilizer( item, buyer )
@@ -352,14 +340,14 @@ perkterminalsetexostabilizer( item, buyer )
     maps\mp\_utility::giveperk( "specialty_sprintfire", 0 );
     maps\mp\_utility::giveperk( "specialty_quickswap", 0 );
     maps\mp\_utility::giveperk( "specialty_fastoffhand", 0 );
-    perk_flourish( item );
+    thread scripts\zm\balance::perk_flourish( item );
 }
 
 perkterminalsetexofastreload( item, buyer )
 {
     maps\mp\_utility::giveperk( "specialty_fastreload", 0 );
     maps\mp\_utility::giveperk( "specialty_sprintreload", 0 );
-    perk_flourish( item );
+    thread scripts\zm\balance::perk_flourish( item );
 }
 
 perkterminalsetexotacticalarmor( item, buyer )
@@ -367,7 +355,7 @@ perkterminalsetexotacticalarmor( item, buyer )
     maps\mp\_utility::giveperk( "specialty_stockpile", 0 );
     maps\mp\_utility::giveperk( "specialty_extralethal", 0 );
     maps\mp\_utility::giveperk( "specialty_extratactical", 0 );
-    perk_flourish( item );
+    thread scripts\zm\balance::perk_flourish( item );
 }
 
 sidequest_start( name )

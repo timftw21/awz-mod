@@ -7,6 +7,7 @@ main()
     replacefunc( maps\mp\zombies\zombie_dog::dogroundnumenemies, ::dogroundnumenemies );
     replacefunc( maps\mp\zombies\_terminals::zombiegroundslamcommon, ::zombiegroundslamcommon );
     replacefunc( maps\mp\zombies\_terminals::getitemcost, ::getitemcost );
+    replacefunc( maps\mp\zombies\_terminals::perkterminalsetexorevive, ::perkterminalsetexorevive );
     replacefunc( maps\mp\_utility::_giveweapon, ::_giveweapon );
     replacefunc( maps\mp\zombies\_zombies_laststand::respawnplayerzombies, ::respawnplayerzombies );
     replacefunc( maps\mp\zombies\_mutators::mutator_apply, ::mutator_apply );
@@ -901,8 +902,6 @@ mutator_apply( var_0 )
 respawnplayerzombies( var_0 )
 {
     self notify( "revive" );
-    if ( scripts\zm\classic::enabled() && isdefined( self.selfreviveactive ) && self.selfreviveactive )
-        scripts\zm\classic::remove_self_revive_perks();
     self.laststand = undefined;
     self.inlaststand = 0;
     self.headicon = "";
@@ -1117,4 +1116,63 @@ hostroundnumenemies( var_0 )
     count = int( ceil( stock_count * 0.8 ) );
     println( "[Zombies Balance] Infection round enemies=" + count + " stock=" + stock_count );
     return count;
+}
+
+// Solo Medic is the stock perk that can be bought before finding an Exo Suit.
+// Keep the normal suit animation whenever the player has one.
+perkterminalsetexorevive( item, buyer )
+{
+    self.isexostimactive = 1;
+    if ( maps\mp\zombies\_terminals::hasexosuit() )
+    {
+        println( "[Zombies Perks] Exo Medic acquired: using suit flourish" );
+        weapon = maps\mp\gametypes\zombies::getexosuitperkweaponname( "stim" );
+        duration = maps\mp\gametypes\zombies::getexosuitperkweaponduration();
+        maps\mp\gametypes\zombies::playweaponflourish( weapon, duration );
+    }
+    else
+        thread perk_flourish( item );
+}
+
+// Camouflage uses the UAV wrist device (killstreakTable.csv, weapon column 11).
+// Wait for the client's raise animation to finish, including the delay before
+// playback starts. Never activate camouflage or consume a killstreak.
+perk_flourish( item )
+{
+    self endon( "disconnect" );
+    println( "[Zombies Perks] Perk acquired: " + item );
+    if ( !isalive( self ) || maps\mp\zombies\_util::isplayerinlaststand( self ) )
+        return;
+    if ( isdefined( self.playingweaponflourish ) && self.playingweaponflourish )
+        return;
+
+    previous_weapon = self getcurrentweapon( 1 );
+    if ( maps\mp\zombies\_util::iszombiekillstreakweapon( previous_weapon ) || maps\mp\zombies\_util::isrippedturretweapon( previous_weapon ) )
+        return;
+    weapon = maps\mp\_utility::getkillstreakweapon( "zm_camouflage" );
+    if ( !awz_beginweaponflourish( weapon ) )
+        return;
+
+    self.playingweaponflourish = 1;
+    self giveweapon( weapon );
+    self switchtoweaponimmediate( weapon );
+    common_scripts\utility::_disableweaponswitch();
+    maps\mp\zombies\_util::playerallowfire( 0, "flourish" );
+    status = 0;
+    while ( isalive( self ) && !maps\mp\zombies\_util::isplayerinlaststand( self ) && self hasweapon( weapon ) )
+    {
+        status = awz_weaponflourishstatus();
+        if ( status != 0 )
+            break;
+        waitframe();
+    }
+    awz_endweaponflourish();
+    maps\mp\zombies\_util::playerallowfire( 1, "flourish" );
+    if ( self hasweapon( weapon ) )
+        self takeweapon( weapon );
+    common_scripts\utility::_enableweaponswitch();
+    if ( isalive( self ) && !maps\mp\zombies\_util::isplayerinlaststand( self ) && self hasweapon( previous_weapon ) )
+        self switchtoweaponimmediate( previous_weapon );
+    self.playingweaponflourish = 0;
+    println( "[Zombies Perks] Perk flourish cleanup: item=" + item + "; completed=" + ( status == 1 ) );
 }

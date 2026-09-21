@@ -16,6 +16,54 @@ namespace zombies_balance
 		utils::hook::detour format_hint_hook;
 		std::atomic_bool hint_trim_reported{false};
 		std::atomic_bool melee_release_reported{false};
+		utils::hook::detour melee_return_time_hook;
+		utils::hook::detour weapon_animation_rate_hook;
+		std::atomic_uint melee_return_reported{0};
+
+		int fast_knife_pistol(const std::byte* state)
+		{
+			if (!state || game::Com_GetCurrentCoDPlayMode() != game::CODPLAYMODE_ZOMBIES ||
+				(*reinterpret_cast<const unsigned int*>(state + 0x318) & 1)) return -1; // Exo punch, not knife.
+			const auto weapon = *reinterpret_cast<const unsigned int*>(state + 0x5C4);
+			const auto* definition = reinterpret_cast<game::WeaponCompleteDef**>(0x141469110)[weapon & 0x3FF];
+			if (!definition || !definition->szInternalName) return -1;
+			if (!std::strcmp(definition->szInternalName, "iw5_titan45zm_mp")) return 0;
+			if (!std::strcmp(definition->szInternalName, "iw5_dlcgun13_mp")) return 1;
+			return -1;
+		}
+
+		void log_knife_return(const std::byte* state, const int pistol, const bool animation, const float before, const float after)
+		{
+			const auto dual = *reinterpret_cast<const int*>(state + 0x5E8) == 1;
+			const auto bit = 1u << (pistol + (dual ? 2 : 0) + (animation ? 4 : 0));
+			if (!(melee_return_reported.fetch_or(bit) & bit))
+				console::info("[Zombies Balance] Knife return: weapon=%s dual=%d %s=%.3f -> %.3f\n",
+					pistol ? "1911" : "Atlas 45", dual, animation ? "animation rate" : "recovery ms", before, after);
+		}
+
+		int melee_return_time_stub(const std::byte* state, const int hand)
+		{
+			const auto stock = melee_return_time_hook.invoke<int>(state, hand);
+			const auto pistol = fast_knife_pistol(state);
+			if (pistol < 0 || stock <= 0) return stock;
+			const auto reduced = (stock + 1) / 2;
+			log_knife_return(state, pistol, false, static_cast<float>(stock), static_cast<float>(reduced));
+			return reduced;
+		}
+
+		float weapon_animation_rate_stub(const std::byte* state, const unsigned int weapon, const int hand,
+			const void* animations, const unsigned int animation)
+		{
+			const auto stock = weapon_animation_rate_hook.invoke<float>(state, weapon, hand, animations, animation);
+			// QUICK_RAISE (43) is reused by normal switches. Only accelerate the
+			// knife return, whose player-state phase is WEAPON_MELEE_END (17).
+			if (!state || animation != 43 || hand < 0 || hand > 1 ||
+				*reinterpret_cast<const int*>(state + 0x374 + hand * 0x1C) != 17) return stock;
+			const auto pistol = fast_knife_pistol(state);
+			if (pistol < 0) return stock;
+			log_knife_return(state, pistol, true, stock, stock * 2);
+			return stock * 2;
+		}
 
 		bool melee_recovery_complete(const std::byte* movement)
 		{
@@ -158,6 +206,11 @@ namespace zombies_balance
 			utils::hook::nop(0x140147377, 14);
 			utils::hook::jump(0x140147377, melee_stance_recovery_stub, true);
 			console::info("[Zombies Balance] Installed animation-based melee movement recovery for all stances in Zombies\n");
+			// PM's knife-return timer caps quickRaiseTime at 350 ms. Halve its
+			// result, not the shared weapon asset, and match the client clip rate.
+			melee_return_time_hook.create(0x1401540B0, &melee_return_time_stub);
+			weapon_animation_rate_hook.create(0x1401F06D0, &weapon_animation_rate_stub);
+			console::info("[Zombies Balance] Atlas 45/1911 knife return: 50%% recovery time; 2x return-animation speed\n");
 			// Shared reserve capacity query, used by pickups, refill scripts and ammo limits.
 			get_max_ammo_hook.create(0x14016EA60, &get_max_ammo_stub);
 			// Client hint formatter: config string 0x11E + index, localization,
@@ -170,6 +223,7 @@ namespace zombies_balance
 				set_gold_upgrade_camo();
 				hint_trim_reported = false;
 				melee_release_reported = false;
+				melee_return_reported = 0;
 				for (auto& scale : ammo_scales) scale.store(1.0f, std::memory_order_relaxed);
 				console::info("[Zombies Balance] Reset upgrade ammo capacities for new match\n");
 			});

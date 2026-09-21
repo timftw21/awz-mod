@@ -9,6 +9,7 @@ else
 	game:endsolo()
 end
 
+require("progression")
 require("solo")
 require("menu_xboxlive")
 require("menu_xboxlive_lobby")

@@ -5,6 +5,7 @@
 #include "fastfiles.hpp"
 #include "command.hpp"
 #include "console.hpp"
+#include "assets/weapons.hpp"
 
 #include <utils/concurrency.hpp>
 #include <utils/hook.hpp>
@@ -67,6 +68,10 @@ namespace fastfiles
 			if (type == game::ASSET_TYPE_SCRIPTFILE)
 			{
 				dump_gsc_script(name, result);
+			}
+			else if (type == game::ASSET_TYPE_WEAPON && !game::environment::is_sp())
+			{
+				weapons::hide_unused_grenade_launcher(result);
 			}
 
 			if (diff > 100)

@@ -15,7 +15,12 @@ builders.zombiesWeaponInfoHudDef = function(...)
 
 	local stockUpdate = name.m_eventHandlers.weapon_change
 	local function update(element, event)
-		local mark = Game.GetOmnvar("ui_horde_count")
+		-- GetPlayerWeaponName and the stock display-name binding both read the
+		-- predicted viewmodel weapon. Its camo encodes the upgrade, so the color
+		-- changes with the label instead of waiting for the server's omnvar.
+		local weapon = Game.GetPlayerWeaponName() or ""
+		local camo = tonumber(weapon:match("[_+]camo(%d+)")) or 0
+		local mark = tonumber(Engine.TableLookup("mp/zmWeaponLevels.csv", 1, tostring(camo), 0))
 		local gold = mark == 10
 		-- The stock update selects rarity_0; change its color while keeping its
 		-- name, underbarrel tooltip, visibility, and map-specific behavior.
@@ -23,19 +28,16 @@ builders.zombiesWeaponInfoHudDef = function(...)
 			color = gold and { r = 1, g = 0.78, b = 0.2 } or Colors.s1.text_rarity0
 		})
 		stockUpdate(element, event)
-		if element.awzMark ~= mark then
-			element.awzMark = mark
-			print("[Zombies Balance] Weapon HUD Mk=" .. tostring(mark) .. "; gold=" .. tostring(gold))
+		if element.awzWeapon ~= weapon then
+			element.awzWeapon = weapon
+			print("[Zombies Balance] Weapon HUD " .. weapon .. "; Mk=" .. tostring(mark) .. "; gold=" .. tostring(gold))
 		end
 	end
 
 	name:registerEventHandler("weapon_change", update)
 	name:registerEventHandler("playerstate_client_changed", update)
-	-- This also corrects the color when the server's level arrives after the
-	-- weapon-change event, and when viewing another player.
-	name:registerOmnvarHandler("ui_horde_count", update)
 	update(name, {})
 	return hud
 end
 
-print("[Zombies Balance] Mk 10 gold weapon text registered")
+print("[Zombies Balance] Mk 10 gold weapon text synchronized with the displayed weapon")
