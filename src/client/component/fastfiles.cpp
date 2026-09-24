@@ -6,6 +6,7 @@
 #include "command.hpp"
 #include "console.hpp"
 #include "assets/weapons.hpp"
+#include "localized_strings.hpp"
 
 #include <utils/concurrency.hpp>
 #include <utils/hook.hpp>
@@ -62,7 +63,7 @@ namespace fastfiles
 		game::XAssetHeader db_find_x_asset_header_stub(game::XAssetType type, const char* name, int allow_create_default)
 		{
 			const auto start = game::Sys_Milliseconds();
-			const auto result = db_find_x_asset_header_hook.invoke<game::XAssetHeader>(type, name, allow_create_default);
+			auto result = db_find_x_asset_header_hook.invoke<game::XAssetHeader>(type, name, allow_create_default);
 			const auto diff = game::Sys_Milliseconds() - start;
 
 			if (type == game::ASSET_TYPE_SCRIPTFILE)
@@ -72,6 +73,11 @@ namespace fastfiles
 			else if (type == game::ASSET_TYPE_WEAPON && !game::environment::is_sp())
 			{
 				weapons::hide_unused_grenade_launcher(result);
+			}
+			else if (type == game::ASSET_TYPE_LOCALIZE_ENTRY && !game::environment::is_sp())
+			{
+				// Cursor hints resolve assets directly; the UI string hook is bypassed.
+				result = localized_strings::override_zombies_hint(name, result);
 			}
 
 			if (diff > 100)

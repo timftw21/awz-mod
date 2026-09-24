@@ -22,6 +22,9 @@ namespace solo
 
 		// These settings belong to this session, never to the player's saved config.
 		const std::pair<const char*, const char*> settings[] = {
+			// Keep the loaded player profile when onlinegame is disabled. Otherwise
+			// LiveStorage selects an unloaded offline buffer whose changes cannot save.
+			{"useonlinestats", "1"},
 			{"onlinegame", "0"}, {"systemlink", "0"}, {"splitscreen", "0"},
 			{"xblive_privatematch", "1"}, {"party_maxplayers", "1"},
 			{"sv_maxclients", "1"}, {"ui_gametype", "zombies"}, {"g_gametype", "zombies"}
@@ -84,6 +87,7 @@ namespace solo
 			game::Dvar_SetFromStringByNameFromSource(name, value, game::DVAR_SOURCE_INTERNAL);
 		}
 		console::info("[Solo] Session entered: offline, one player, no party; external game packets disabled\n");
+		console::info("[Solo] Retained saved player profile (useonlinestats=1) for persistent Zombies progress\n");
 		return true;
 	}
 
@@ -114,6 +118,10 @@ namespace solo
 			game::Dvar_SetFromStringByNameFromSource(name, value, game::DVAR_SOURCE_INTERNAL);
 		}
 		game::Dvar_SetFromStringByNameFromSource("ui_mapname", last_map.c_str(), game::DVAR_SOURCE_INTERNAL);
+		// Offline teardown does not run the online lobby's profile-save flow.
+		// The local storage service persists this profile to players2/user/mpdata*.
+		command::execute("uploadStats", true);
+		console::info("[Solo] Requested player profile save after returning from %s\n", last_map.c_str());
 		console::info("[Solo] Returned to pre-game lobby; retained map=%s and offline session\n", last_map.c_str());
 	}
 

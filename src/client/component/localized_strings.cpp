@@ -59,6 +59,41 @@ namespace localized_strings
 		});
 	}
 
+	game::XAssetHeader override_zombies_hint(const char* name, game::XAssetHeader asset)
+	{
+		// LocalizeEntry stores value before name. Return stable replacement entries
+		// without modifying the stock assets shared with other modes/languages.
+		static struct
+		{
+			const char* value;
+			const char* name;
+		} hints[] = {
+			// Zombies orbital crates use their reward strings, not the drone-release prompt.
+			{"Hold ^3[{+activate}]^7 for ^3Sentry Turret^7", "ZOMBIES_SENTRY_TURRET"},
+			{"Hold ^3[{+activate}]^7 for ^3Rocket Turret^7.", "ZOMBIES_ROCKET_TURRET"},
+			{"Hold ^3[{+activate}]^7 for ^3Energy Turret^7", "ZOMBIES_LASER_TURRET"},
+			{"Hold ^3[{+activate}]^7 for ^3AI Rocket Assault Drone^7.", "ZOMBIES_ROCKET_DRONE"},
+			{"Hold ^3[{+activate}]^7 for ^3AI Assault Drone^7.", "ZOMBIES_ASSAULT_DRONE"},
+			{"Hold ^3[{+activate}]^7 for ^3Credits^7.", "ZOMBIES_CRATE_MONEY"},
+			{"Hold ^3[{+activate}]^7 for ^3Camouflage^7.", "ZOMBIES_CRATE_SHIELD"},
+			{"Hold ^3[{+activate}]^7 to release package early", "KILLSTREAKS_DRONE_CAREPACKAGE_RELEASE"},
+			{"Press ^3&&1^7 to toggle hybrid", "PLATFORM_HYBRID_TOGGLE"},
+		};
+		static std::atomic_uint reported{0};
+		if (!asset.data || !name) return asset;
+		for (size_t i = 0; i < std::size(hints); ++i)
+		{
+			if (std::strcmp(name, hints[i].name)) continue;
+			if (game::Com_GetCurrentCoDPlayMode() != game::CODPLAYMODE_ZOMBIES ||
+				std::strcmp(game::SEH_GetCurrentLanguageName(), "english")) return asset;
+			asset.data = &hints[i];
+			if (!(reported.fetch_or(1u << i) & (1u << i)))
+				console::info("[Zombies Hints] %s: %s\n", name, hints[i].value);
+			return asset;
+		}
+		return asset;
+	}
+
 	class component final : public component_interface
 	{
 	public:

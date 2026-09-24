@@ -3,6 +3,7 @@
 #include "game/game.hpp"
 #include "gsc/script_extension.hpp"
 #include "console.hpp"
+#include "scheduler.hpp"
 #include "solo.hpp"
 #include <utils/hook.hpp>
 
@@ -203,6 +204,14 @@ namespace zombies_balance
 		void post_unpack() override
 		{
 			if (!game::environment::is_mp()) return;
+			// String dvars need the script-string allocator, which is not ready at post_unpack.
+			// Register on the first main frame, before gameplay can publish headshot counts.
+			scheduler::once([]
+			{
+				// PlayerCmd_SetClientDvar requires SCRIPTINFO even for named custom dvars.
+				game::Dvar_RegisterString("ui_awz_headshots", "", game::DVAR_FLAG_SCRIPTINFO);
+				console::info("[Zombies Balance] Registered script-writable live headshot scoreboard channel after engine initialization\n");
+			}, scheduler::pipeline::main);
 			utils::hook::nop(0x140147377, 14);
 			utils::hook::jump(0x140147377, melee_stance_recovery_stub, true);
 			console::info("[Zombies Balance] Installed animation-based melee movement recovery for all stances in Zombies\n");

@@ -44,9 +44,11 @@ main()
     level.awz_emp_spawned = 0;
     level.awz_movement_logged = [];
     level thread log_rounds();
+    level thread sync_headshots();
     println( "[Zombies Balance] Prices: Reload=3000, Soldier=2500, decontamination=500; Slam=6s/2.5x damage; infection enemies=80%; self-revive=6s; dogs=8/10 per player" );
     println( "[Zombies Balance] Installed: Mk 10 gold/4.55x damage, EMP cap=1, Solo revive grace=2s, power=200, fabricator=950 stock format, sprint=" + zombie_sprint_scale() * 100 + "%, infected sprint=90%, reboot=4s/3s" );
     println( "[Zombies Movement] Round-based pacing through round 14; run ceiling follows reduced sprint speed; locomotion cadence separated from travel speed" );
+    println( "[Zombies Stats] Live and AAR headshots follow the stock Zombies kill counter" );
 }
 
 // Map nine upgrades onto the full original attachment progression.
@@ -89,6 +91,79 @@ log_rounds()
         level.awz_mutations_skipped = 0;
         level.awz_exo_spawned = 0;
         level.awz_emp_spawned = 0;
+    }
+}
+
+sync_headshots()
+{
+    level endon( "game_ended" );
+    if ( isdefined( level.players ) )
+    {
+        foreach ( player in level.players )
+            player thread watch_headshot_kills();
+    }
+    publish_headshots();
+
+    for (;;)
+    {
+        level waittill( "connected", player );
+        player thread watch_headshot_kills();
+        player thread publish_headshots_after_connect();
+    }
+}
+
+publish_headshots_after_connect()
+{
+    self endon( "disconnect" );
+    level endon( "game_ended" );
+    waitframe();
+    publish_headshots();
+}
+
+watch_headshot_kills()
+{
+    self endon( "disconnect" );
+    level endon( "game_ended" );
+    if ( isdefined( self.awz_watching_headshots ) )
+        return;
+    self.awz_watching_headshots = 1;
+
+    for (;;)
+    {
+        self waittill( "killed_enemy" );
+        publish_headshots();
+    }
+}
+
+publish_headshots()
+{
+    if ( !isdefined( level.players ) )
+        return;
+
+    snapshot = "";
+    foreach ( player in level.players )
+    {
+        count = 0;
+        if ( isdefined( player.headshotkills ) )
+            count = player.headshotkills;
+        // The post-match scoreboard reads the standard persistent headshot stat.
+        player.headshots = count;
+        player maps\mp\_utility::setpersstat( "headshots", count );
+        snapshot = snapshot + ( player getentitynumber() ) + ":" + count + ",";
+    }
+
+    foreach ( viewer in level.players )
+    {
+        if ( isbot( viewer ) || isdefined( viewer.awz_headshot_snapshot ) && viewer.awz_headshot_snapshot == snapshot )
+            continue;
+        viewer setclientdvar( "ui_awz_headshots", snapshot );
+        viewer.awz_headshot_snapshot = snapshot;
+    }
+
+    if ( !isdefined( level.awz_headshot_snapshot ) || level.awz_headshot_snapshot != snapshot )
+    {
+        level.awz_headshot_snapshot = snapshot;
+        println( "[Zombies Stats] Live headshots: " + snapshot );
     }
 }
 

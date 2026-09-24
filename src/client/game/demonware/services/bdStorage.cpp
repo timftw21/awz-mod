@@ -8,6 +8,7 @@
 #include <utils/cryptography.hpp>
 
 #include <component/filesystem.hpp>
+#include <component/console.hpp>
 
 namespace demonware
 {
@@ -158,7 +159,13 @@ namespace demonware
 		buffer->read_uint64(&owner);
 
 		const auto path = get_user_file_path(filename);
-		utils::io::write_file(path, data);
+		if (!utils::io::write_file(path, data))
+		{
+			console::error("[Player Storage] Failed to save %s (%zu bytes)\n", path.c_str(), data.size());
+			server->create_reply(this->task_id(), game::BD_EXTERNAL_STORAGE_SERVICE_ERROR)->send();
+			return;
+		}
+		console::info("[Player Storage] Saved %s (%zu bytes)\n", path.c_str(), data.size());
 
 		auto* info = new bdFileInfo;
 
@@ -192,12 +199,14 @@ namespace demonware
 		const auto path = get_user_file_path(filename);
 		if (utils::io::read_file(path, &data))
 		{
+			console::info("[Player Storage] Loaded %s (%zu bytes)\n", path.c_str(), data.size());
 			auto reply = server->create_reply(this->task_id());
 			reply->add(new bdFileData(data));
 			reply->send();
 		}
 		else
 		{
+			console::info("[Player Storage] No readable saved file: %s\n", path.c_str());
 			server->create_reply(this->task_id(), game::BD_NO_FILE)->send();
 		}
 	}

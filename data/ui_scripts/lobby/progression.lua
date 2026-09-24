@@ -27,6 +27,8 @@ game:addlocalizedstring("AWZ_MAIN_QUEST", "MAIN QUEST")
 game:addlocalizedstring("AWZ_QUEST_COMPLETE", "COMPLETE")
 game:addlocalizedstring("AWZ_QUEST_INCOMPLETE", "UNSOLVED")
 game:addlocalizedstring("AWZ_QUEST_UNKNOWN", "UNSOLVED")
+game:addlocalizedstring("AWZ_PERSONAL_BEST_HEADSHOTS", "Headshots")
+game:addlocalizedstring("AWZ_CAREER", "CAREER")
 
 -- Show every shipped movie, including locked endings. The original menu hides
 -- later DLC behind marketing data and treats a previously viewed movie as an unlock.
@@ -95,8 +97,64 @@ function ZombiesCheckUnlockMovie()
 end
 
 local stockAddStats = LUI.MPLobbyBase.AddZombiesStats
+-- The stock lobby reads both labels and map keys by position. Insert the
+-- existing headshot best immediately after kills, then grow its four-row box.
+table.insert(ZombiesLobbyStats.Labels, 4, "AWZ_PERSONAL_BEST_HEADSHOTS")
+for mapName, stats in pairs(ZombiesLobbyStats.Maps) do
+	local key = stats.Keys[3]:gsub("Kills", "Headshots")
+	table.insert(stats.Keys, 4, key)
+	print("[Zombies Progress] Personal Bests headshots: " .. mapName .. "=" .. key)
+end
+
+local stockRefreshStats = LUI.MPLobbyBase.ZombiesRefreshStats
+local careerFields = {"Revives", "Kills", "Headshots", "MoneyEarned"}
+LUI.MPLobbyBase.ZombiesRefreshStats = function(menu)
+	if not menu.zmStatsUseDefaultMap then
+		return stockRefreshStats(menu)
+	end
+
+	local controller = Engine.GetFirstActiveController()
+	local values = {AAR.GetZombiesStat(controller, "highestRound") or 0}
+	for index, field in ipairs(careerFields) do
+		values[index + 1] = AAR.GetZombiesStat(controller, "total" .. field) or 0
+	end
+	for dlc = 2, 4 do
+		local prefix = "dlc" .. dlc
+		values[1] = math.max(values[1], Engine.GetPlayerDataReservedInt(controller, CoD.StatsGroup.Coop, prefix .. "RoundsBest") or 0)
+		for index, field in ipairs(careerFields) do
+			values[index + 1] = values[index + 1] + (Engine.GetPlayerDataReservedInt(controller, CoD.StatsGroup.Coop, prefix .. field) or 0)
+		end
+	end
+	for index, value in ipairs(values) do
+		menu.zmStatTexts[index]:setText(value)
+	end
+	local summary = controller .. ":" .. table.concat(values, ",")
+	if summary ~= menu.awzCareerSummary then
+		menu.awzCareerSummary = summary
+		print("[Zombies Progress] Career controller:round,revives,kills,headshots,credits=" .. summary)
+	end
+end
+
 LUI.MPLobbyBase.AddZombiesStats = function(menu, useDefaultMap)
 	stockAddStats(menu, useDefaultMap)
+	local statsPanel = menu.zmStatTexts[1]:getParent()
+	local height = 124 + (#ZombiesLobbyStats.Labels - 4) * 27
+	statsPanel:registerAnimationState("default", {
+		leftAnchor = true, rightAnchor = false, topAnchor = true, bottomAnchor = false,
+		left = 0, top = 0, width = GenericMenuDims.menu_right_standard - GenericMenuDims.menu_left,
+		height = height
+	})
+	statsPanel:animateToState("default", 0)
+	menu.list:setLayoutCached(false)
+	print("[Zombies Progress] Personal Bests panel: " .. #ZombiesLobbyStats.Labels .. " rows; height=" .. height)
+	if useDefaultMap then
+		-- The menu before the lobby passes useDefaultMap. The stock header
+		-- sits immediately before the spacer preceding the stats panel.
+		local header = statsPanel:getPreviousSibling():getPreviousSibling()
+		header:getLastChild():setText(Engine.Localize("AWZ_CAREER"))
+		print("[Zombies Progress] Career panel: title=CAREER; main quest hidden")
+		return
+	end
 	menu:AddSpacing(2)
 	local row = LUI.UIElement.new({
 		leftAnchor = true, rightAnchor = false, topAnchor = true, bottomAnchor = false,
@@ -145,4 +203,4 @@ LUI.MPLobbyBase.AddZombiesStats = function(menu, useDefaultMap)
 	refresh()
 end
 
-print("[Zombies Progress] Four intros, three quest-locked outros and lobby main quest status registered")
+print("[Zombies Progress] Four intros, three quest-locked outros, Personal Bests headshots and main quest status registered")

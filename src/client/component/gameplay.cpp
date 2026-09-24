@@ -2,6 +2,7 @@
 #include "loader/component_loader.hpp"
 #include "game/game.hpp"
 #include "game/dvars.hpp"
+#include "console.hpp"
 
 #include <utils/hook.hpp>
 
@@ -116,6 +117,11 @@ namespace gameplay
 			utils::hook::invoke<void>(0x140135A90, pm, pml, dvars::jump_height->current.value);
 		}
 
+		float ladder_command_scale_stub(const game::playerState_s* ps, const game::mp::usercmd_s* command)
+		{
+			return utils::hook::invoke<float>(0x140143730, ps, command) * 1.25f;
+		}
+
 		void pm_player_trace_stub(game::pmove_t* pm, game::trace_t* results, const float* start,
 			const float* end, const game::Bounds* bounds, int pass_entity_num, int content_mask)
 		{
@@ -181,6 +187,14 @@ namespace gameplay
 			dvars::jump_ladderPushVel = game::Dvar_RegisterFloat("jump_ladderPushVel", 128.0f, 0.0f, 1024.0f, game::DVAR_FLAG_REPLICATED);
 			utils::hook::jump(0x1401358B3, jump_push_off_ladder, true);
 			utils::hook::nop(0x1401358BF, 4); // Nop skipped opcodes
+
+			// PM_LadderMove normally clamps (view-forward Z + 0.25) * 2.5 to [-1, 1].
+			// Always take its +1 path: forward climbs and backward descends at any pitch.
+			utils::hook::nop(0x140146372, 2);
+			// Scale only the ladder's command speed, preserving analog input and diagonal normalization.
+			// This shared movement path runs on both the server and the predicted client.
+			utils::hook::call(0x140146457, ladder_command_scale_stub);
+			console::info("[Gameplay] Ladders: 1.25x speed; forward/backward climb independently of view pitch\n");
 
 			dvars::g_elevators = game::Dvar_RegisterBool("g_elevators", false, game::DVAR_FLAG_REPLICATED);
 			utils::hook::call(0x140146134, pm_player_trace_stub);
