@@ -1,3 +1,11 @@
+# AWZ-MOD: a zombies-focused fork of s1-mod. Features include:
+
+- Classic mode. Begin with the 1911 and fight the horde with a more classic ruleset.
+- Character select.
+- Menu improvements.
+- Bug fixes and gameplay tweaks.
+- More to come :)
+
 # S1x/s1-mod: A Modded Client
 
 This is a client modification for S1!  
