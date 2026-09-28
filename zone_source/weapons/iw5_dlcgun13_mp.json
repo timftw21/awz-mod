@@ -408,8 +408,8 @@
         "MELEE_ALT_CROUCHING_VICTIM_CROUCHING": "vm_exo_melee_punch",
         "MELEE_ALT_PRONE_VICTIM_CROUCHING": "vm_exo_melee_punch",
         "MELEE_ALT_JUMPING_VICTIM_CROUCHING": "vm_exo_melee_punch",
-        "RELOAD": "va_m1911_reload",
-        "RELOAD_EMPTY": "va_m1911_reload_empty",
+        "RELOAD": "awz_m1911_reload",
+        "RELOAD_EMPTY": "awz_m1911_reload_empty",
         "RELOAD_START": "",
         "RELOAD_END": "",
         "FAST_RELOAD": "",
@@ -418,7 +418,7 @@
         "FAST_RELOAD_END": "",
         "DUALMAG_RELOAD": "",
         "DUALMAG_RELOAD_EMPTY": "",
-        "SPEED_RELOAD": "va_m1911_reload_quick",
+        "SPEED_RELOAD": "awz_m1911_reload_quick",
         "RELOAD_FROM_ALT": "",
         "RAISE": "va_m1911_pullout",
         "FIRST_RAISE": "va_m1911_pullout_first",
@@ -1792,7 +1792,7 @@
             ]
         ]
     },
-    "knifeAttachTagOverride": "",
+    "knifeAttachTagOverride": "tag_knife_attach",
     "stowTag": "tag_stow_back_mid_attach",
     "altWeapon": 0,
     "playerAnimType": 2,

@@ -124,7 +124,8 @@ namespace zombies_balance
 			}
 			auto start = end;
 			while (start && text[start - 1] == '.') --start;
-			if (start == end) return false;
+			// Ellipses convey an ongoing state; only remove a sentence-ending period.
+			if (end - start != 1) return false;
 			std::memmove(text + start, text + end, length - end + 1);
 			return true;
 		}
@@ -135,7 +136,7 @@ namespace zombies_balance
 			if (game::Com_GetCurrentCoDPlayMode() == game::CODPLAYMODE_ZOMBIES && strip_hint_period(output) &&
 				!hint_trim_reported.exchange(true))
 			{
-				console::info("[Zombies Balance] Removed terminal hint punctuation; stock localization, bindings and colors preserved\n");
+				console::info("[Zombies Balance] Removed terminal hint periods; ellipses, bindings and colors preserved\n");
 			}
 		}
 

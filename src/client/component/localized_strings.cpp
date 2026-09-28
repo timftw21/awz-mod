@@ -78,6 +78,18 @@ namespace localized_strings
 			{"Hold ^3[{+activate}]^7 for ^3Camouflage^7.", "ZOMBIES_CRATE_SHIELD"},
 			{"Hold ^3[{+activate}]^7 to release package early", "KILLSTREAKS_DRONE_CAREPACKAGE_RELEASE"},
 			{"Press ^3&&1^7 to toggle hybrid", "PLATFORM_HYBRID_TOGGLE"},
+			{"^7COOLING DOWN...", "ZOMBIES_CURE_COOLDOWN_HINT"},
+			{"^7Security COOLING DOWN...", "ZOMBIES_TRAP_COOLDOWN"},
+			{"^7COOLING DOWN... &&1 more second", "ZOMBIES_TERMINAL_COOLDOWN_SEC"},
+			{"^7COOLING DOWN... &&1 more seconds", "ZOMBIES_TERMINAL_COOLDOWN_SECS"},
+			{"^7Orbital Strike COOLING DOWN...", "ZOMBIE_BRG_AIRSTRIKE_TRAP_COOLDOWN"},
+			{"^7Ambulance COOLING DOWN...", "ZOMBIE_BRG_AMBULANCE_TRAP_COOLDOWN"},
+			{"^7Car Wash COOLING DOWN...", "ZOMBIE_BRG_CARWASH_TRAP_COOLDOWN"},
+			{"^7DNA Bomb COOLING DOWN...", "ZOMBIE_BRG_DNA_BOMB_TRAP_COOLDOWN"},
+			{"^7Electrified Floor COOLING DOWN...", "ZOMBIE_BRG_ELECTRIC_FLOOR_TRAP_COOLDOWN"},
+			{"^7Insta-Gator COOLING DOWN...", "ZOMBIE_BRG_GATOR_TRAP_COOLDOWN"},
+			{"^7Automated Snipers COOLING DOWN...", "ZOMBIE_BRG_SNIPER_TRAP_COOLDOWN"},
+			{"^7Camouflage Spray COOLING DOWN...", "ZOMBIE_BRG_STEAM_TRAP_COOLDOWN"},
 		};
 		static std::atomic_uint reported{0};
 		if (!asset.data || !name) return asset;

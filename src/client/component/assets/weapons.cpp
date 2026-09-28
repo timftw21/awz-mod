@@ -257,6 +257,17 @@ namespace weapons
 					return;
 				}
 				console::info("[Classic] 1911 ready for weapon registration\n");
+				// An exported empty script string is nonzero, so it suppresses the
+				// engine's default knife tag and merges the knife into j_gun instead.
+				const auto knife_tag = *reinterpret_cast<const game::scr_string_t*>(weapon + 0xD24);
+				const auto* visuals = reinterpret_cast<const weapon_visuals*>(weapon);
+				const auto animation_name = [visuals](const size_t index)
+				{
+					return visuals->animations && visuals->animations[index] ? visuals->animations[index]->name : "<missing>";
+				};
+				console::info("[Classic] 1911 animations: knife tag='%s'; reload=%s; empty=%s; quick=%s\n",
+					knife_tag ? game::SL_ConvertToString(knife_tag) : "<default>",
+					animation_name(24), animation_name(25), animation_name(34));
 				console::info("[Classic] 1911 projectile attachment verified; upgrade registration left to normal gameplay\n");
 				// S1 WeaponDef's native projectile damage fields (also used by grenades).
 				console::info("[Classic] 1911 projectile blast: radius=%d inner=%d outer=%d cone=%.1f degrees\n",

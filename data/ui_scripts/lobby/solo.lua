@@ -10,7 +10,7 @@ game:addlocalizedstring("AWZ_MODE_DETAILS", "MODE DETAILS")
 game:addlocalizedstring("AWZ_MODE_STANDARD", "Standard")
 game:addlocalizedstring("AWZ_MODE_CLASSIC", "Classic")
 game:addlocalizedstring("AWZ_MODE_STANDARD_DESC", "Exo Zombies with the current awz-mod balance changes. Equip an Exo Suit, buy perks, and face the full range of enemies and special rounds. Upgrade weapons through nine purchases to Mk 10. Main quests are enabled.")
-game:addlocalizedstring("AWZ_MODE_CLASSIC_DESC", "Start with the 1911. Regular zombies and dogs, with slower sprints. No Exo Suit, Slam, orbital drops, or main quests. Going down removes all perks. Upgrade to Mk 5, then Mk 10 for 5,000 credits each.")
+game:addlocalizedstring("AWZ_MODE_CLASSIC_DESC", "Start with the 1911. Regular zombies and dogs, with slower sprints. No Exo Suit, Slam, orbital drops, main quests, or certain map-specific mechanics. Going down removes all perks. Upgrade to Mk 5, then Mk 10 for 5,000 credits each.")
 game:addlocalizedstring("AWZ_CHARACTER_SELECT", "CHARACTER SELECT")
 
 local intros = {
