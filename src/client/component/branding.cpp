@@ -1,10 +1,8 @@
 #include <std_include.hpp>
 #include "loader/component_loader.hpp"
 #include "game/game.hpp"
-#include "game/dvars.hpp"
 
 #include "localized_strings.hpp"
-#include "scheduler.hpp"
 #include "dvars.hpp"
 #include "console.hpp"
 
@@ -17,14 +15,14 @@ namespace branding
 {
 	namespace
 	{
-		constexpr auto version_display = "AWZ-MOD 0.4";
+		constexpr auto version_display = "AWZ-MOD 0.5";
 		utils::hook::detour ui_get_formatted_build_number_hook;
 
 		const char* ui_get_formatted_build_number_stub()
 		{
 			const auto* const build_num = ui_get_formatted_build_number_hook.invoke<const char*>();
 
-			return utils::string::va("%s (%s)", VERSION, build_num);
+			return utils::string::va("%s (%s)", version_display, build_num);
 		}
 	}
 
@@ -44,36 +42,12 @@ namespace branding
 			}
 			localized_strings::override("LUA_MENU_LEGAL_COPYRIGHT", "s1-mod: " VERSION);
 
-			dvars::override::set_string("version", utils::string::va("s1-mod %s", VERSION));
+			dvars::override::set_string("version", version_display);
 
 			ui_get_formatted_build_number_hook.create(
 				SELECT_VALUE(0x14035B3F0, 0x1404A8950), ui_get_formatted_build_number_stub);
 
-			dvars::ui_showBranding = game::Dvar_RegisterBool("ui_showBranding", false, game::DVAR_FLAG_SAVED);
-			console::info("[Branding] Version display: %s\n", version_display);
-
-			scheduler::loop([]()
-			{
-				if (dvars::ui_showBranding && !dvars::ui_showBranding->current.enabled && 
-					(game::CL_IsCgameInitialized() && !game::VirtualLobby_Loaded()))
-				{
-					return;
-				}
-
-				const auto x = 4;
-				const auto y = 4;
-				const auto scale = 1.0f;
-				float color[4] = {0.666f, 0.666f, 0.666f, 0.666f};
-				const auto* text = version_display;
-
-				auto* font = game::R_RegisterFont("fonts/consolefont");
-
-				if (!font) return;
-
-				game::R_AddCmdDrawText(text, std::numeric_limits<int>::max(), font, static_cast<float>(x),
-				                       y + static_cast<float>(font->pixelHeight) * scale,
-				                       scale, scale, 0.0f, color, 0);
-			}, scheduler::pipeline::renderer);
+			console::info("[Branding] Top-left overlay removed; version display: %s\n", version_display);
 		}
 	};
 }

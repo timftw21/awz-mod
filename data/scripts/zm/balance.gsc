@@ -5,6 +5,7 @@ main()
     replacefunc( maps\mp\zombies\zombie_host::hostroundnumenemies, ::hostroundnumenemies );
     replacefunc( maps\mp\zombies\_zombies_laststand::laststandselfrevive, ::laststandselfrevive );
     replacefunc( maps\mp\zombies\zombie_dog::dogroundnumenemies, ::dogroundnumenemies );
+    replacefunc( maps\mp\zombies\_util::agentclassregister, ::agentclassregister );
     replacefunc( maps\mp\zombies\_terminals::zombiegroundslamcommon, ::zombiegroundslamcommon );
     replacefunc( maps\mp\zombies\_terminals::getitemcost, ::getitemcost );
     replacefunc( maps\mp\zombies\_terminals::perkterminalsetexorevive, ::perkterminalsetexorevive );
@@ -26,6 +27,7 @@ main()
     replacefunc( maps\mp\gametypes\zombies::givepointsforevent, ::givepointsforevent );
     replacefunc( maps\mp\gametypes\zombies::createzombieweaponstate, ::createzombieweaponstate );
     replacefunc( maps\mp\gametypes\zombies::getem1maxammo, ::getem1maxammo );
+    replacefunc( maps\mp\gametypes\zombies::refillammozombies, ::refillammozombies );
     replacefunc( maps\mp\zombies\killstreaks\_zombie_killstreaks::getnextmoneyamount, ::getnextmoneyamount );
     replacefunc( maps\mp\zombies\zombies_spawn_manager::applyzombiemutator, ::applyzombiemutator );
     replacefunc( maps\mp\zombies\_zombies::calulatezombiemovemode, ::calulatezombiemovemode );
@@ -37,6 +39,10 @@ main()
     replacefunc( maps\mp\agents\_scripted_agent_anim_util::playanimnatrateuntilnotetrack, ::playanimnatrateuntilnotetrack );
     replacefunc( maps\mp\zombies\_mutators::mutatoremz_applyemp, ::mutatoremz_applyemp );
     replacefunc( maps\mp\zombies\_zombies_audio::playerweaponupgrade, ::playerweaponupgrade );
+    replacefunc( maps\mp\gametypes\zombies::modifyplayerdamagezombies, ::modifyplayerdamagezombies );
+    replacefunc( maps\mp\gametypes\zombies::instakillpickup, ::instakillpickup );
+    replacefunc( maps\mp\gametypes\zombies::doublepointspickup, ::doublepointspickup );
+    replacefunc( maps\mp\gametypes\zombies::trappickup, ::trappickup );
     level.awz_spawn_rolls = 0;
     level.awz_emp_blocked = 0;
     level.awz_mutations_skipped = 0;
@@ -48,7 +54,43 @@ main()
     println( "[Zombies Balance] Prices: Reload=3000, Soldier=2500, decontamination=500; Slam=6s/2.5x damage; infection enemies=80%; self-revive=6s; dogs=8/10 per player" );
     println( "[Zombies Balance] Installed: Mk 10 gold/4.55x damage, EMP cap=1, Solo revive grace=2s, power=200, fabricator=950 stock format, sprint=" + zombie_sprint_scale() * 100 + "%, infected sprint=90%, reboot=4s/3s" );
     println( "[Zombies Movement] Round-based pacing through round 14; run ceiling follows reduced sprint speed; locomotion cadence separated from travel speed" );
+    println( "[Zombies Balance] Exploder splash=2x against zombies; active powerups refresh; Power Surge uses stock drop rules" );
+    println( "[Classic] Upgraded 1911 blast damage is disabled against players" );
     println( "[Zombies Stats] Live and AAR headshots follow the stock Zombies kill counter" );
+}
+
+agentclassregister( agent_class, type )
+{
+    // Apply before round-health caching, including Carrier's enhanced Goliaths.
+    if ( type == "zombie_melee_goliath" )
+    {
+        stock_scale = agent_class.health_scale;
+        agent_class.health_scale = stock_scale * 0.8;
+        println( "[Zombies Balance] Goliath health=80%; class scale=" + stock_scale + " -> " + agent_class.health_scale );
+    }
+
+    if ( !isdefined( level.agentclasses ) )
+        level.agentclasses = [];
+    level.agentclasses[type] = agent_class;
+}
+
+goliath_speed_multiplier()
+{
+    // Preserve the Goliath's stock resistance to slowing effects.
+    multiplier = maps\mp\zombies\_zombies::getbuffspeedmultiplier();
+    if ( multiplier < 1 )
+        multiplier = clamp( multiplier * 1.25, 0, 1 );
+    return multiplier * 0.85;
+}
+
+goliath_movement_rate()
+{
+    return 1.3 * goliath_speed_multiplier();
+}
+
+goliath_traversal_rate()
+{
+    return 1.25 * goliath_speed_multiplier();
 }
 
 // Map nine upgrades onto the full original attachment progression.
@@ -177,6 +219,8 @@ weapon_upgrade_cost( player, base_weapon )
 {
     if ( scripts\zm\classic::enabled() )
         return 5000;
+    if ( getdvar( "mapname" ) == "mp_zombie_lab" && maps\mp\zombies\_wall_buys::isspecialweaponbox( self ) )
+        return 3000;
     if ( !maps\mp\zombies\_wall_buys::isspecialweaponbox( self ) && maps\mp\zombies\_util::haszombieweaponstate( player, base_weapon ) && player.weaponstate[base_weapon]["level"] == 9 )
         return 3000;
     return 1500;
@@ -275,7 +319,9 @@ weaponlevelboxthink()
         maps\mp\zombies\_wall_buys::weaponlevelboxsetupspecialbox();
         maps\mp\zombies\_wall_buys::weaponlevelboxturnofflight();
         common_scripts\utility::trigger_off();
-        level waittill( "special_weapon_box_unlocked" );
+        // Outbreak can restore a saved unlock before this station starts.
+        if ( !maps\mp\zombies\_util::is_true( level.awz_outbreak_station_unlocked ) )
+            level waittill( "special_weapon_box_unlocked" );
 
         if ( level.currentgen )
             common_scripts\utility::trigger_on();
@@ -579,6 +625,51 @@ getem1maxammo( var_0 )
         var_1 = var_1 * 1.2;
 
     return 1800.0 * var_1 * ammo_scale( maps\mp\zombies\_util::getzombieweaponlevel( self, "iw5_em1zm_mp" ) );
+}
+
+refillammozombies( var_0, var_1 )
+{
+    var_2 = var_0 getweaponslistprimaries();
+    var_2[var_2.size] = var_0 getlethalweapon();
+    var_2[var_2.size] = var_0 gettacticalweapon();
+
+    if ( !isdefined( var_1 ) )
+        var_1 = 0;
+
+    foreach ( var_4 in var_2 )
+    {
+        if ( var_4 == "none" )
+            continue;
+
+        if ( maps\mp\zombies\_util::isrippedturretweapon( var_4 ) || maps\mp\zombies\_util::iszombiekillstreakweapon( var_4 ) )
+            continue;
+
+        if ( maps\mp\zombies\_util::iszombieequipment( var_4 ) )
+        {
+            if ( !var_1 )
+                maps\mp\zombies\_wall_buys::fillweaponclip( var_0, var_4 );
+            else
+                maps\mp\zombies\_wall_buys::plusoneweaponclip( var_0, var_4 );
+
+            continue;
+        }
+
+        var_0 givemaxammo( var_4 );
+
+        // Stock's "dlcgun1" substring also matches the 1911's "dlcgun13".
+        // Only the CEL-3 needs the special clip refill; other guns refill reserves.
+        base_weapon = getweaponbasename( var_4 );
+        if ( base_weapon == "iw5_dlcgun1zm_mp" )
+        {
+            var_5 = weaponclipsize( var_4 );
+            var_0 setweaponammoclip( var_4, var_5, "right" );
+        }
+        else if ( base_weapon == "iw5_dlcgun13_mp" )
+            println( "[Classic] Max Ammo refilled 1911 reserves; player=" + var_0 getentitynumber() + " weapon=" + var_4 + " right_clip=" + var_0 getweaponammoclip( var_4, "right" ) + " left_clip=" + var_0 getweaponammoclip( var_4, "left" ) );
+    }
+
+    if ( maps\mp\zombies\_util::isplayerinlaststand( var_0 ) )
+        var_0 maps\mp\zombies\_zombies_laststand::refillstoredweaponammo();
 }
 
 getnextmoneyamount()
@@ -1250,4 +1341,283 @@ perk_flourish( item )
         self switchtoweaponimmediate( previous_weapon );
     self.playingweaponflourish = 0;
     println( "[Zombies Perks] Perk flourish cleanup: item=" + item + "; completed=" + ( status == 1 ) );
+}
+
+// Keep stock damage handling, with player-safe upgraded 1911 blasts and stronger exploder damage to zombies.
+modifyplayerdamagezombies( var_0, var_1, var_2, var_3, var_4, var_5, var_6, var_7, var_8 )
+{
+    var_9 = var_3;
+
+    if ( !isdefined( var_0 ) )
+        return 0;
+
+    if ( !isdefined( var_5 ) )
+        return 0;
+
+    // Filter by the actual damage weapon so both pistols, every camo and last stand are covered.
+    // Run before friendly-fire round handling; zombie victims retain normal damage and scaling.
+    if ( isplayer( var_0 ) && isdefined( var_4 ) && isexplosivedamagemod( var_4 ) && getweaponbasename( var_5 ) == "iw5_dlcgun13_mp" && issubstr( var_5, "_explosive1911" ) )
+    {
+        if ( !isdefined( var_0.awz_1911_blast_logged ) )
+        {
+            var_0.awz_1911_blast_logged = 1;
+            println( "[Classic] Blocked upgraded 1911 blast; player=" + var_0 getentitynumber() + " weapon=" + var_5 + " mod=" + var_4 + " damage=" + var_9 );
+        }
+        return 0;
+    }
+
+    if ( maps\mp\gametypes\zombies::isfriendlyfireroundkill( var_0, var_1, var_2, var_3, var_4, var_5 ) )
+        return maps\mp\gametypes\zombies::calculatefriendlyfirerounddamage( var_0, var_1, var_2, var_3, var_4, var_5 );
+
+    var_10 = 1;
+
+    if ( isdefined( var_2 ) && var_2.classname == "trigger_hurt" && var_9 == 999999 )
+        var_10 = 0;
+
+    if ( var_10 )
+    {
+        if ( isdefined( var_0.godmode ) && var_0.godmode )
+            return 0;
+
+        if ( isdefined( var_0.onlydamagedbylargeenemies ) && var_0.onlydamagedbylargeenemies )
+        {
+            if ( isdefined( var_2 ) && !( isdefined( var_2.meleesectortype ) && var_2.meleesectortype == "large" ) )
+                return 0;
+        }
+    }
+
+    if ( isdefined( var_2 ) && isdefined( var_2.owner ) )
+        var_2 = var_2.owner;
+
+    var_11 = maps\mp\_utility::attackerishittingteam( var_0, var_2 );
+    var_12 = getweaponbasename( var_5 );
+
+    if ( !isdefined( var_12 ) )
+        var_12 = "none";
+
+    if ( isdefined( level.damageweapontoweapon[var_12] ) )
+        var_12 = level.damageweapontoweapon[var_12];
+
+    if ( isdefined( level.defusedamagemultiplier ) && maps\mp\zombies\_util::is_true( var_0.isdefusing ) && isai( var_2 ) && !isscriptedagent( var_2 ) )
+        var_9 = int( var_9 * level.defusedamagemultiplier );
+
+    if ( isplayer( var_0 ) )
+    {
+        if ( isai( var_2 ) && var_2 maps\mp\zombies\_util::zombiewaitingfordeath() )
+            return 0;
+
+        if ( var_11 )
+            return 0;
+
+        if ( maps\mp\zombies\_util::isplayerinlaststand( var_0 ) )
+            return 0;
+
+        if ( maps\mp\zombies\_util::is_true( var_0.enteringgoliath ) )
+            return 0;
+
+        if ( maps\mp\gametypes\zombies::playerinvinciblefromcrateorpowerup( var_0, var_1, var_4 ) )
+            return 0;
+
+        if ( isdefined( var_0.lastrevivetime ) )
+        {
+            var_13 = 1000;
+
+            if ( gettime() - var_0.lastrevivetime < var_13 )
+                return 0;
+        }
+
+        if ( isdefined( var_5 ) && ( maps\mp\_utility::iskillstreakweapon( var_5 ) || maps\mp\zombies\_util::iszombieequipment( var_5 ) || maps\mp\zombies\_traps::isexplosivetrap( var_5 ) || var_5 == "exploder_zm_small_mp" ) )
+            return 0;
+
+        if ( var_12 == "iw5_exocrossbowzm_mp" || var_12 == "iw5_mahemzm_mp" )
+            var_9 = 20;
+
+        if ( isdefined( var_2 ) && isai( var_2 ) )
+        {
+            var_13 = 500;
+
+            if ( isscriptedagent( var_2 ) && isdefined( var_0.lastzombiedamagetime ) && gettime() - var_0.lastzombiedamagetime < var_13 )
+                return 0;
+
+            var_14 = level.agentclasses[var_2.agent_type].melee_damage_scale;
+            var_15 = level.agentclasses[var_2.agent_type].damage_scale;
+
+            if ( isdefined( var_14 ) && var_4 == "MOD_MELEE" )
+                var_9 = int( max( var_9 * var_14, 1 ) );
+            else if ( isdefined( var_15 ) )
+                var_9 = int( max( var_9 * var_15, 1 ) );
+        }
+
+        if ( maps\mp\zombies\_util::isplayerinfected( var_0 ) )
+            return int( min( var_9, var_0.health - 1 ) );
+
+        if ( isdefined( var_2 ) && isai( var_2 ) )
+        {
+            if ( isdefined( level.ondamageplayerfunc ) && isdefined( level.ondamageplayerfunc[var_2.agent_type] ) )
+                var_2 [[ level.ondamageplayerfunc[var_2.agent_type] ]]( var_0 );
+        }
+
+        if ( var_5 == "exploder_zm_large_mp" )
+            var_0 addzmexploderbloodfx();
+    }
+
+    if ( isai( var_0 ) && !isplayer( var_0 ) && !isdefined( var_2 ) )
+    {
+        if ( var_4 == "MOD_FALLING" )
+            return 0;
+
+        if ( var_5 == "exploder_zm_small_mp" || var_5 == "exploder_zm_large_mp" )
+            var_9 = int( level.wavecounter * 100 + 50 );
+
+        if ( maps\mp\zombies\_util::isinstakill() && !var_0 maps\mp\zombies\_util::instakillimmune() )
+            var_9 = var_0.maxhealth + 10;
+    }
+
+    if ( isai( var_0 ) && !isplayer( var_0 ) && isai( var_2 ) )
+    {
+        if ( !isscriptedagent( var_2 ) && isalliedsentient( var_0, var_2 ) )
+            return 0;
+
+        if ( isdefined( var_0.agent_type ) && var_0.agent_type == "sq_character" && var_0.godmode )
+            return 0;
+
+        if ( isdefined( var_0.agent_type ) && var_0.agent_type == "zm_squadmate" )
+        {
+            var_15 = level.agentclasses[var_2.agent_type].damagescalevssquadmates;
+
+            if ( isdefined( var_15 ) )
+                var_9 = int( var_9 * var_15 );
+        }
+
+        if ( maps\mp\zombies\_util::is_true( var_0.nodamageself ) && var_0 == var_2 )
+            return 0;
+    }
+
+    if ( isai( var_0 ) && !isplayer( var_0 ) && isdefined( var_1 ) && var_1.classname == "misc_turret" )
+    {
+        if ( isdefined( var_1.team ) && var_1.team == var_0.team )
+            return 0;
+    }
+
+    if ( isdefined( var_2 ) && isplayer( var_2 ) && isai( var_0 ) && !isplayer( var_0 ) )
+    {
+        if ( isdefined( level.modifyweapondamage[var_12] ) )
+            var_9 = [[ level.modifyweapondamage[var_12] ]]( var_0, var_2, var_9, var_4, var_5, var_6, var_7, var_8 );
+
+        if ( isdefined( level.modifyweapondamagebyagenttype ) && isdefined( var_0.agent_type ) )
+        {
+            if ( isdefined( level.modifyweapondamagebyagenttype[var_0.agent_type] ) && isdefined( level.modifyweapondamagebyagenttype[var_0.agent_type][var_12] ) )
+                var_9 = [[ level.modifyweapondamagebyagenttype[var_0.agent_type][var_12] ]]( var_0, var_2, var_9, var_4, var_5, var_6, var_7, var_8 );
+        }
+
+        var_9 = var_0 maps\mp\zombies\killstreaks\_zombie_killstreaks::modifydamagekillstreak( var_1, var_2, var_9, var_5, var_4 );
+
+        if ( maps\mp\zombies\_util::haszombieweaponstate( var_2, var_12 ) )
+        {
+            var_16 = 0.2;
+
+            if ( isdefined( var_2.weaponstate[var_12]["weapon_level_increase"] ) )
+                var_16 = var_2.weaponstate[var_12]["weapon_level_increase"];
+
+            var_9 = int( var_9 + var_9 * var_16 * ( var_2.weaponstate[var_12]["level"] - 1 ) );
+        }
+
+        var_9 = var_0 maps\mp\gametypes\zombies::modifyplayerequipmentdamage( var_5, var_9, var_4, var_6 );
+
+        if ( isdefined( var_4 ) && var_4 == "MOD_MELEE" )
+        {
+            if ( var_2 ishighjumpallowed() )
+                var_9 = level.playerexomeleedamage;
+            else
+                var_9 = level.playermeleedamage;
+        }
+
+        if ( isdefined( level.modifydamagebyagenttype ) && isdefined( level.modifydamagebyagenttype[var_0.agent_type] ) )
+            var_9 = [[ level.modifydamagebyagenttype[var_0.agent_type] ]]( var_0, var_2, var_9, var_4, var_5, var_6, var_7, var_8 );
+
+        var_9 = var_0 maps\mp\gametypes\zombies::mutatormodifydamage( var_1, var_2, var_5, var_9, var_8, var_4 );
+        var_9 = var_0 maps\mp\gametypes\zombies::trapmodifydamage( var_5, var_9, var_8, var_4 );
+
+        if ( maps\mp\zombies\_util::is_true( var_0.inairforleap ) )
+            var_9 = var_9 * 2;
+
+        if ( isdefined( level.zombie_rewards ) )
+        {
+            if ( isdefined( level.laststandupgrade ) && level.laststandupgrade == 1 && maps\mp\zombies\_util::isplayerinlaststand( var_2 ) )
+                var_9 = var_9 * 4;
+        }
+
+        if ( maps\mp\zombies\_util::isinstakill() && !var_0 maps\mp\zombies\_util::instakillimmune() )
+            var_9 = var_0.maxhealth + 10;
+
+        if ( var_0 maps\mp\zombies\_util::zombiewaitingfordeath() )
+            return 0;
+
+        if ( var_0 maps\mp\zombies\_util::zombieshouldwaitfordeath( var_0, var_2, var_9, var_4, var_5, var_6, var_7, var_8 ) )
+        {
+            var_0 thread maps\mp\zombies\_util::zombiedelaydeath( var_0, var_2, var_9, var_4, var_5, var_6, var_7, var_8 );
+            return 0;
+        }
+
+        if ( !maps\mp\zombies\_util::ispendingdeath( var_0 ) )
+            var_2 maps\mp\gametypes\zombies::givepointsfordamage( var_0, var_9, var_4, var_5, var_6, var_7, var_8, 0 );
+
+        if ( isdefined( level.processenemydamagedfunc ) )
+            self thread [[ level.processenemydamagedfunc ]]( var_0, var_1, var_2, var_3, var_4, var_5, var_6, var_7, var_8 );
+    }
+
+    if ( isplayer( var_0 ) )
+    {
+        var_0 maps\mp\zombies\_zombies_audio::player_hurt( var_2, var_9, var_4 );
+
+        if ( isdefined( var_2 ) && isai( var_2 ) && isscriptedagent( var_2 ) )
+            var_0.lastzombiedamagetime = gettime();
+    }
+    else if ( isai( var_0 ) && isscriptedagent( var_0 ) )
+        var_0 maps\mp\zombies\_zombies_audio::zombie_hurt( var_2, var_9 );
+
+    // Stock recalculates exploder splash by round, so scale its final damage.
+    // Restrict the increase to enemy AI; player and friendly AI damage is stock.
+    if ( isai( var_0 ) && !isplayer( var_0 ) && var_0.team != level.playerteam && ( var_5 == "exploder_zm_small_mp" || var_5 == "exploder_zm_large_mp" ) )
+    {
+        var_9 = int( var_9 * 2 );
+        if ( !isdefined( level.awz_exploder_damage_logged ) || level.awz_exploder_damage_logged != level.wavecounter )
+        {
+            level.awz_exploder_damage_logged = level.wavecounter;
+            println( "[Zombies Balance] Exploder splash=2x against neighboring zombies; round=" + level.wavecounter + " damage=" + var_9 );
+        }
+    }
+    return var_9;
+}
+
+
+instakillpickup( var_0 )
+{
+    println( "[Zombies Powerups] Collected insta_kill; player=" + var_0 getentitynumber() + " previous_end=" + getomnvar( "ui_zm_instakill" ) + "; full timer restarted" );
+    maps\mp\gametypes\zombies::showteamsplashzombies( "zombie_insta_kill" );
+    var_0 playlocalsound( "zmb_pickup_overdrive" );
+    level thread maps\mp\gametypes\zombies::activateinstakill();
+    maps\mp\zombies\_zombies_audio_announcer::announcerpickupdialog( "hyper_dmg", var_0 );
+    level thread maps\mp\gametypes\zombies::removepickup( self );
+}
+
+doublepointspickup( var_0 )
+{
+    println( "[Zombies Powerups] Collected double_points; player=" + var_0 getentitynumber() + " previous_end=" + getomnvar( "ui_zm_doublepoints" ) + "; full timer restarted" );
+    maps\mp\gametypes\zombies::showteamsplashzombies( "zombie_double_points" );
+    var_0 playlocalsound( "zmb_pickup_general" );
+    level thread maps\mp\gametypes\zombies::activatedoublepoints();
+    maps\mp\zombies\_zombies_audio_announcer::announcerpickupdialog( "multiplier", var_0 );
+    level thread maps\mp\gametypes\zombies::removepickup( self );
+}
+
+
+trappickup( var_0 )
+{
+    println( "[Zombies Powerups] Collected trap; player=" + var_0 getentitynumber() + " previous_end=" + getomnvar( "ui_zm_alltraps" ) + "; full timer restarted" );
+    maps\mp\gametypes\zombies::showteamsplashzombies( "zombie_activate_traps" );
+    var_0 playsoundtoteam( "zmb_pickup_traps", "allies" );
+    level thread maps\mp\gametypes\zombies::activatetrappickup( var_0 );
+    maps\mp\zombies\_zombies_audio_announcer::announcerpickupdialog( "security", var_0 );
+    level thread maps\mp\gametypes\zombies::removepickup( self );
 }

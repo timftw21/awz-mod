@@ -1,0 +1,16 @@
+Ref,Name,Desc,,,Filter,UnlockLevel,,,Target1,XP1,,,,,,,,,,,,,,,,,ChallengeID,,,,,,,,,,,,,,,Parent,Disabled,Event
+ch_awz_10_kills,Initiation,Eliminate &&1 enemies after reaching level 10.,,,awz_gate_10,10,,,250,0,,,,,,,,,,,,,,,,,2000,,,,,,,,,,,,,,,,0,kills
+ch_awz_10_headshots,Steady Aim,Get &&1 headshot kills after reaching level 10.,,,awz_gate_10,10,,,50,0,,,,,,,,,,,,,,,,,2001,,,,,,,,,,,,,,,,0,headshots
+ch_awz_10_melee,Close Quarters,Get &&1 melee kills after reaching level 10.,,,awz_gate_10,10,,,25,0,,,,,,,,,,,,,,,,,2002,,,,,,,,,,,,,,,,0,melee
+ch_awz_20_kills,Crowd Control,Eliminate &&1 enemies after reaching level 20.,,,awz_gate_20,20,,,500,0,,,,,,,,,,,,,,,,,2003,,,,,,,,,,,,,,,,0,kills
+ch_awz_20_headshots,Sharpshooter,Get &&1 headshot kills after reaching level 20.,,,awz_gate_20,20,,,100,0,,,,,,,,,,,,,,,,,2004,,,,,,,,,,,,,,,,0,headshots
+ch_awz_20_rounds,Endurance,Survive &&1 full rounds after reaching level 20.,,,awz_gate_20,20,,,10,0,,,,,,,,,,,,,,,,,2005,,,,,,,,,,,,,,,,0,rounds
+ch_awz_30_kills,Exterminator,Eliminate &&1 enemies after reaching level 30.,,,awz_gate_30,30,,,750,0,,,,,,,,,,,,,,,,,2006,,,,,,,,,,,,,,,,0,kills
+ch_awz_30_melee,Knife Work,Get &&1 melee kills after reaching level 30.,,,awz_gate_30,30,,,75,0,,,,,,,,,,,,,,,,,2007,,,,,,,,,,,,,,,,0,melee
+ch_awz_30_rounds,Hold the Line,Survive &&1 full rounds after reaching level 30.,,,awz_gate_30,30,,,15,0,,,,,,,,,,,,,,,,,2008,,,,,,,,,,,,,,,,0,rounds
+ch_awz_40_kills,Relentless,Eliminate &&1 enemies after reaching level 40.,,,awz_gate_40,40,,,1000,0,,,,,,,,,,,,,,,,,2009,,,,,,,,,,,,,,,,0,kills
+ch_awz_40_headshots,Deadeye,Get &&1 headshot kills after reaching level 40.,,,awz_gate_40,40,,,200,0,,,,,,,,,,,,,,,,,2010,,,,,,,,,,,,,,,,0,headshots
+ch_awz_40_flawless,Unbroken,Survive &&1 full rounds without going down after reaching level 40.,,,awz_gate_40,40,,,10,0,,,,,,,,,,,,,,,,,2011,,,,,,,,,,,,,,,,0,flawless
+ch_awz_50_kills,Last Stand,Eliminate &&1 enemies after reaching level 50.,,,awz_gate_50,50,,,1500,0,,,,,,,,,,,,,,,,,2012,,,,,,,,,,,,,,,,0,kills
+ch_awz_50_headshots,Perfect Aim,Get &&1 headshot kills after reaching level 50.,,,awz_gate_50,50,,,300,0,,,,,,,,,,,,,,,,,2013,,,,,,,,,,,,,,,,0,headshots
+ch_awz_50_rounds,Prestige Trial,Survive &&1 full rounds after reaching level 50.,,,awz_gate_50,50,,,25,0,,,,,,,,,,,,,,,,,2014,,,,,,,,,,,,,,,,0,rounds

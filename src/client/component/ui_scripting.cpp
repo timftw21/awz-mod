@@ -11,6 +11,7 @@
 #include "game_module.hpp"
 #include "fps.hpp"
 #include "solo.hpp"
+#include "zombies_progression.hpp"
 
 #include "game/ui_scripting/execution.hpp"
 
@@ -157,6 +158,7 @@ namespace ui_scripting
 			lua["game"] = game_type;
 
 			game_type["issolo"] = [](const game&) { return solo::active(); };
+			game_type["zombiesprogressionavailable"] = [](const game&) { return zombies_progression::available(); };
 			game_type["beginsolo"] = [](const game&) { return solo::begin(); };
 			game_type["endsolo"] = [](const game&) { solo::leave(); };
 			game_type["sololobbyready"] = [](const game&) { solo::lobby_ready(); };

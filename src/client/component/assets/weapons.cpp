@@ -10,6 +10,7 @@
 #include "weapons.hpp"
 
 #include <utils/hook.hpp>
+#include <span>
 
 namespace weapons
 {
@@ -28,18 +29,44 @@ namespace weapons
 		};
 		static_assert(offsetof(model_bones, names) == 0x38);
 
+		struct animation_notify
+		{
+			game::scr_string_t name;
+			float time;
+		};
+
 		struct animation_timing
 		{
 			const char* name;
 			std::uint16_t data_counts[3];
 			std::uint16_t frame_count;
 			std::uint8_t flags;
-			std::byte unused[31];
+			std::uint8_t bone_counts[12];
+			std::uint8_t notify_count;
+			std::uint8_t asset_type;
+			std::uint8_t ik_type;
+			unsigned int random_counts[3];
+			unsigned int index_count;
 			float frame_rate;
+			float frequency;
+			const game::scr_string_t* names;
+			const std::uint8_t* bytes;
+			const std::int16_t* shorts;
+			const float* ints;
+			const std::int16_t* random_shorts;
+			const std::uint8_t* random_bytes;
+			const void* random_ints;
+			const void* indices;
+			const animation_notify* notify;
+			std::byte remaining[88];
 		};
 		static_assert(offsetof(animation_timing, frame_count) == 0xE);
 		static_assert(offsetof(animation_timing, flags) == 0x10);
 		static_assert(offsetof(animation_timing, frame_rate) == 0x30);
+		static_assert(offsetof(animation_timing, names) == 0x38);
+		static_assert(offsetof(animation_timing, ints) == 0x50);
+		static_assert(offsetof(animation_timing, notify) == 0x78);
+		static_assert(sizeof(animation_timing) == 0xD8);
 
 		struct weapon_visuals
 		{
@@ -54,6 +81,204 @@ namespace weapons
 		static_assert(offsetof(weapon_visuals, gun_models) == 0x18);
 		static_assert(offsetof(weapon_visuals, hide_tags) == 0x58);
 		static_assert(offsetof(weapon_visuals, animations) == 0x68);
+
+		struct animation_storage
+		{
+			animation_timing parts{};
+			animation_notify end_notify{};
+			std::vector<std::uint8_t> bytes;
+			std::vector<std::int16_t> shorts;
+			std::vector<float> ints;
+		};
+
+		template <typename T>
+		std::span<const T> consume(std::span<const T>& data, const size_t count)
+		{
+			if (count > data.size()) throw std::runtime_error("truncated animation data");
+			const auto result = data.first(count);
+			data = data.subspan(count);
+			return result;
+		}
+
+		// Bake the actual last pose, including prop bones, into a quiet looping
+		// idle. Reusing vm_exo_suit_idle raises the left hand after the flourish.
+		void make_intro_idle(const animation_timing& source, animation_storage& output)
+		{
+			const auto count = source.bone_counts[9];
+			if (!count || !source.frame_count || source.frame_count >= 256 || (source.flags & 6) ||
+				!source.names || !source.bytes || !source.shorts || !source.ints || !source.random_shorts)
+				throw std::runtime_error("unsupported intro animation layout");
+			if (!source.notify || !source.notify_count || source.notify[source.notify_count - 1].time != 1.0f ||
+				std::strcmp(game::SL_ConvertToString(source.notify[source.notify_count - 1].name), "end"))
+				throw std::runtime_error("intro animation has no terminal end marker");
+			std::span bytes(source.bytes, source.data_counts[0]);
+			std::span shorts(source.shorts, source.data_counts[1]);
+			std::span ints(source.ints, source.data_counts[2]);
+			std::span random_shorts(source.random_shorts, source.random_counts[1]);
+			std::span random_bytes(source.random_bytes, source.random_counts[0]);
+			std::vector<std::array<std::int16_t, 4>> rotations;
+			std::vector<std::array<float, 3>> translations(count);
+			for (unsigned int group = 0; group < 5; ++group)
+			{
+				for (unsigned int bone = 0; bone < source.bone_counts[group]; ++bone)
+				{
+					std::array<std::int16_t, 4> rotation{0, 0, 0, 32767};
+					if (group)
+					{
+						const size_t width = (group == 1 || group == 3) ? 2 : 4;
+						std::span<const std::int16_t> key;
+						if (group < 3)
+						{
+							const auto keys = static_cast<std::uint16_t>(consume(shorts, 1)[0]) + 1u;
+							if (consume(bytes, keys).back() != source.frame_count)
+								throw std::runtime_error("intro rotation has no final key");
+							key = consume(random_shorts, keys * width).last(width);
+						}
+						else key = consume(shorts, width);
+						std::copy(key.begin(), key.end(), rotation.end() - width);
+					}
+					rotations.push_back(rotation);
+				}
+			}
+			if (rotations.size() != count) throw std::runtime_error("invalid intro bone counts");
+			for (unsigned int group = 5; group < 9; ++group)
+			{
+				for (unsigned int i = 0; i < source.bone_counts[group]; ++i)
+				{
+					const auto bone = consume(bytes, 1)[0];
+					if (bone >= count) throw std::runtime_error("invalid intro translation bone");
+					if (group < 7)
+					{
+						const auto keys = static_cast<std::uint16_t>(consume(shorts, 1)[0]) + 1u;
+						if (consume(bytes, keys).back() != source.frame_count)
+							throw std::runtime_error("intro translation has no final key");
+						const auto bounds = consume(ints, 6);
+						for (size_t axis = 0; axis < 3; ++axis) translations[bone][axis] = bounds[axis];
+						if (group == 5)
+						{
+							const auto key = consume(random_bytes, keys * 3).last(3);
+							for (size_t axis = 0; axis < 3; ++axis) translations[bone][axis] += bounds[axis + 3] * key[axis];
+						}
+						else
+						{
+							const auto key = consume(random_shorts, keys * 3).last(3);
+							for (size_t axis = 0; axis < 3; ++axis) translations[bone][axis] += bounds[axis + 3] * static_cast<std::uint16_t>(key[axis]);
+						}
+					}
+					else if (group == 7)
+					{
+						const auto key = consume(ints, 3);
+						std::copy(key.begin(), key.end(), translations[bone].begin());
+					}
+				}
+			}
+			if (!bytes.empty() || !shorts.empty() || !ints.empty() || !random_shorts.empty() || !random_bytes.empty())
+				throw std::runtime_error("unconsumed intro animation data");
+
+			output = {};
+			for (unsigned int bone = 0; bone < count; ++bone)
+			{
+				output.bytes.push_back(static_cast<std::uint8_t>(bone));
+				output.shorts.insert(output.shorts.end(), rotations[bone].begin(), rotations[bone].end());
+				output.ints.insert(output.ints.end(), translations[bone].begin(), translations[bone].end());
+			}
+			auto& idle = output.parts;
+			idle.name = source.name;
+			idle.data_counts[0] = count;
+			idle.data_counts[1] = count * 4;
+			idle.data_counts[2] = count * 3;
+			idle.frame_count = 1;
+			idle.flags = 1;
+			idle.bone_counts[4] = idle.bone_counts[7] = idle.bone_counts[9] = count;
+			idle.asset_type = source.asset_type;
+			idle.ik_type = source.ik_type;
+			idle.frame_rate = idle.frequency = source.frame_rate;
+			idle.names = source.names;
+			idle.bytes = output.bytes.data();
+			idle.shorts = output.shorts.data();
+			idle.ints = output.ints.data();
+			// XAnim's client notification walker (0x1404E7470) reads the next
+			// marker even on a constant idle pose. Retain the stock end sentinel;
+			// omitting it dereferences null at 0x1404E7687 as the intro finishes.
+			// Only the end marker belongs here; intro sounds must not replay.
+			output.end_notify = source.notify[source.notify_count - 1];
+			idle.notify_count = 1;
+			idle.notify = &output.end_notify;
+		}
+
+		size_t static_translation(const animation_timing& animation, const char* name)
+		{
+			// Static/zero translation bone indices form the tail of dataByte;
+			// each preceding animated translation uses six floats for its bounds.
+			const auto tail = animation.bone_counts[7] + animation.bone_counts[8];
+			if (!animation.names || !animation.bytes || !animation.ints || tail > animation.data_counts[0])
+				throw std::runtime_error("invalid static animation data");
+			const auto* bones = animation.bytes + animation.data_counts[0] - tail;
+			for (unsigned int i = 0; i < animation.bone_counts[7]; ++i)
+			{
+				if (bones[i] >= animation.bone_counts[9]) throw std::runtime_error("invalid static translation bone");
+				if (std::strcmp(game::SL_ConvertToString(animation.names[bones[i]]), name)) continue;
+				const auto offset = (animation.bone_counts[5] + animation.bone_counts[6]) * 6 + i * 3;
+				if (offset + 3 <= animation.data_counts[2]) return offset;
+			}
+			throw std::runtime_error("missing static weapon translation");
+		}
+
+		void fix_animation_poses(weapon_visuals* weapon)
+		{
+			if (!weapon || !weapon->name || !weapon->animations) return;
+			constexpr const char* intros[] = {"char_intro_guardzm_mp", "char_intro_execzm_mp",
+				"char_intro_itzm_mp", "char_intro_janitorzm_mp", "char_intro_pilotzm_mp"};
+			static animation_storage idle_poses[std::size(intros)];
+			static std::array<animation_timing*, 180> intro_tables[std::size(intros)];
+			try
+			{
+				for (size_t i = 0; i < std::size(intros); ++i)
+				{
+					if (std::strcmp(weapon->name, intros[i])) continue;
+					if (weapon->animations == intro_tables[i].data()) return;
+					const auto* raise = weapon->animations[37];
+					if (!raise) throw std::runtime_error("missing character flourish");
+					make_intro_idle(*raise, idle_poses[i]);
+					std::copy_n(weapon->animations, intro_tables[i].size(), intro_tables[i].begin());
+					for (const auto slot : {1, 2, 39, 44, 46}) intro_tables[i][slot] = &idle_poses[i].parts;
+					weapon->animations = intro_tables[i].data();
+					console::info("[Zombies Animations] %s: idle/drop now hold %s frame %u with stock end marker; intro and pistol timing preserved\n",
+						weapon->name, raise->name, static_cast<unsigned int>(raise->frame_count));
+					return;
+				}
+
+				if (std::strcmp(weapon->name, "iw5_m182sprzm_mp")) return;
+				static animation_storage melee_poses[7];
+				static std::array<animation_timing*, 180> melee_table;
+				if (weapon->animations == melee_table.data()) return;
+				const auto* miss = weapon->animations[12];
+				if (!miss) throw std::runtime_error("missing knife miss animation");
+				const auto parking = static_translation(*miss, "tag_weapon");
+				std::copy_n(weapon->animations, melee_table.size(), melee_table.begin());
+				for (unsigned int slot = 9; slot <= 15; ++slot)
+				{
+					const auto* source = weapon->animations[slot];
+					if (!source) continue;
+					const auto offset = static_translation(*source, "tag_weapon");
+					auto& pose = melee_poses[slot - 9];
+					pose.parts = *source;
+					pose.ints.assign(source->ints, source->ints + source->data_counts[2]);
+					// The stock miss already parks the rifle behind the camera. Use
+					// that same position for swings/hits; keep hand and knife keys.
+					std::copy_n(miss->ints + parking, 3, pose.ints.begin() + offset);
+					pose.parts.ints = pose.ints.data();
+					melee_table[slot] = &pose.parts;
+				}
+				weapon->animations = melee_table.data();
+				console::info("[Zombies Animations] MK14: knife swings/hits use %s weapon parking (%.2f, %.2f, %.2f); hands, notetracks and timers preserved\n",
+					miss->name, miss->ints[parking], miss->ints[parking + 1], miss->ints[parking + 2]);
+			}
+			catch (const std::exception& error)
+			{
+				console::warn("[Zombies Animations] Cannot repair %s: %s\n", weapon->name, error.what());
+			}
+		}
 
 		// DB_BuildLevelLoadPlan (0x14026E7C0). The progress tracker and all three
 		// DB_LoadXAssets batches consume this same plan.
@@ -307,9 +532,10 @@ namespace weapons
 		}
 	}
 
-	void hide_unused_grenade_launcher(const game::XAssetHeader header)
+	void fix_visuals(const game::XAssetHeader header)
 	{
 		auto* weapon = static_cast<weapon_visuals*>(header.data);
+		fix_animation_poses(weapon);
 		if (!weapon || !weapon->name) return;
 		constexpr const char* weapon_names[] = {"frag_grenade_throw_zombies_mp", "contact_grenade_throw_zombies_mp"};
 		constexpr const char* model_names[] = {"vm_exo_arm_launcher_frag", "vm_exo_arm_launcher_contact"};

@@ -12,12 +12,15 @@ if Engine.IsZombiesMode() then
 	end
 	local mode = mode_name()
 	if Engine.InFrontend() then
+		local matchRanks = Engine.GetDvarString("ui_awz_match_ranks") or ""
 		-- Capture alongside the stock round/time data. Later lobby selections must
 		-- not relabel the completed match when its summary is reopened.
 		local on_back_from_match = AAR.OnBackFromMatch
 		AAR.OnBackFromMatch = function(...)
 			on_back_from_match(...)
 			mode = mode_name()
+			matchRanks = Engine.GetDvarString("ui_awz_match_ranks") or ""
+			print("[Scoreboard] Match ranks captured: " .. matchRanks)
 			print("[Scoreboard] Match summary mode captured: " .. mode)
 		end
 		local get_game_mode_name = AAR.GetGameModeName
@@ -33,7 +36,8 @@ if Engine.IsZombiesMode() then
 			local left, _, right = GetTextDimensions(title, ScoreboardShared.HeaderFont.Font,
 				ScoreboardShared.HeaderFont.Height)
 			local width = math.max(90, right - left + 55)
-			page.states.default.width = page.states.default.width + width
+			local rankWidth = 50
+			page.states.default.width = page.states.default.width + width + rankWidth
 			local feed_rows = page.childrenFeeder
 			page.childrenFeeder = function(...)
 				local rows = feed_rows(...)
@@ -41,6 +45,7 @@ if Engine.IsZombiesMode() then
 					local team = row.id and row.id:match("^team([12])_root$")
 					if team then
 						local columns = row.children[1].children
+						columns[1].states.default.right = columns[1].states.default.right + rankWidth
 						local header = LUI.mp_menus.AARScoreboard.CreateScoreBoardHeaderCell(3, width, team == "2")
 						header.id = "scoreboard_header_headshots"
 						header.children[2].properties.text = title
@@ -52,6 +57,31 @@ if Engine.IsZombiesMode() then
 							local feed_cells = list.childrenFeeder
 							list.childrenFeeder = function(...)
 								local cells = feed_cells(...)
+								local rank, prestige = ("," .. matchRanks):match("," .. player .. ":(%d+):(%d+),")
+								local hasRank = rank ~= nil
+								rank = math.max(0, math.min(Rank.GetMaxRank(), tonumber(rank) or 0))
+								prestige = tonumber(prestige) or 0
+								local nameCell = cells[1]
+								local name = nameCell.children[1]
+								local nameState = name.states.default
+								local left = nameState.left
+								nameCell.states.default.right = nameCell.states.default.right + rankWidth
+								nameState.left = left + rankWidth
+								name.properties.text = ScoreboardTruncate(name.properties.text,
+									nameCell.states.default.right - nameState.left - 8, nameState.height)
+								table.insert(nameCell.children, {
+									type = "UIImage", id = "awz_aar_rank_icon",
+									states = {default = {leftAnchor = true, rightAnchor = false, topAnchor = false, bottomAnchor = false,
+										left = left, width = 26, height = 26, alpha = hasRank and 1 or 0,
+										material = RegisterMaterial(Rank.GetRankIcon(rank, prestige))}}
+								})
+								table.insert(nameCell.children, {
+									type = "UIText", id = "awz_aar_rank_number", properties = {text = hasRank and Rank.GetRankDisplay(rank) or ""},
+									states = {default = {leftAnchor = true, rightAnchor = false, topAnchor = true, bottomAnchor = false,
+										left = left + 28, width = 20, top = nameState.top, height = nameState.height,
+										font = nameState.font, color = nameState.color, alignment = LUI.Alignment.Center}}
+								})
+								print("[Scoreboard] Match rank: player=" .. player .. "; available=" .. tostring(hasRank) .. "; level=" .. (rank + 1) .. "; prestige=" .. prestige)
 								local value = AAR.GetPlayerStat(tonumber(player), "headshots") or 0
 								table.insert(cells, 3, LUI.mp_menus.AARScoreboard.CreateScoreBoardEntryCell(
 									"headshots_" .. player, tostring(value), width))
@@ -93,6 +123,34 @@ scoreboard.scoreColumns.ping = {
 }
 
 if Engine.IsZombiesMode() then
+	local baseWidth = scoreboard.baseWidth
+	scoreboard.baseWidth = function(compact)
+		return baseWidth(compact) + (compact and 0 or 50)
+	end
+	local buildRow = scoreboard.scoreboardRow
+	scoreboard.scoreboardRow = function(team, index, compact, ...)
+		local row = buildRow(team, index, compact, ...)
+		if compact then return row end
+		local name = row:getFirstDescendentById("gamertag")
+		row.rankIcon = LUI.UIImage.new({leftAnchor = true, rightAnchor = false, topAnchor = false, bottomAnchor = false,
+			left = 0, width = 26, height = 26})
+		row.rankIcon.id = "rankIcon"
+		row.rankIcon:addElementBefore(name)
+		row.rankNumber = LUI.UIText.new({leftAnchor = true, rightAnchor = false, topAnchor = false, bottomAnchor = false,
+			left = 0, width = 20, height = ScoreboardShared.CellFont.Height,
+			font = ScoreboardShared.CellFont.Font, alignment = LUI.Alignment.Center})
+		row.rankNumber.id = "rankNumber"
+		row.rankNumber:addElementBefore(name)
+		-- Leave room for the character, voice indicator and rank before the name.
+		local setName = name.setText
+		name.setText = function(element, text)
+			setName(element, ScoreboardTruncate(text, scoreboard.baseWidth(false) - 120, ScoreboardShared.CellFont.Height))
+		end
+		row:processEvent({name = "refresh_row"})
+		return row
+	end
+	print("[Scoreboard] Live Zombies rank icons and levels enabled")
+
 	local previous_snapshot
 	scoreboard.scoreColumns.zm_headshots = {
 		width = 90,

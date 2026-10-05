@@ -11,6 +11,18 @@ namespace logger
 	namespace
 	{
 		game::dvar_t* logger_dev = nullptr;
+		utils::hook::detour com_error_hook;
+
+		void com_error_stub(int code, const char* message, ...)
+		{
+			char buffer[4096]{};
+			va_list args;
+			va_start(args, message);
+			vsnprintf(buffer, sizeof(buffer), message, args);
+			va_end(args);
+			console::error("[Engine Error] code=%d: %s\n", code, buffer);
+			com_error_hook.invoke<void>(code, "%s", buffer);
+		}
 
 		void print_warning(const char* msg, ...)
 		{
@@ -107,6 +119,7 @@ namespace logger
 		{
 			if (game::environment::is_mp())
 			{
+				com_error_hook.create(game::Com_Error, com_error_stub);
 				nullsub_56();
 				sub_1400E7420();
 

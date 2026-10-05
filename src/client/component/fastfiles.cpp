@@ -7,6 +7,7 @@
 #include "console.hpp"
 #include "assets/weapons.hpp"
 #include "localized_strings.hpp"
+#include "zombies_progression.hpp"
 
 #include <utils/concurrency.hpp>
 #include <utils/hook.hpp>
@@ -62,9 +63,24 @@ namespace fastfiles
 
 		game::XAssetHeader db_find_x_asset_header_stub(game::XAssetType type, const char* name, int allow_create_default)
 		{
+			if (type == game::ASSET_TYPE_STRINGTABLE && !game::environment::is_sp())
+			{
+				if (auto* table = zombies_progression::challenge_table(name))
+				{
+					game::XAssetHeader result{};
+					result.stringTable = table;
+					return result;
+				}
+			}
 			const auto start = game::Sys_Milliseconds();
 			auto result = db_find_x_asset_header_hook.invoke<game::XAssetHeader>(type, name, allow_create_default);
+			if (type == game::ASSET_TYPE_STRINGTABLE && game::environment::is_mp())
+				result.stringTable = zombies_progression::notification_table(name, result.stringTable);
 			const auto diff = game::Sys_Milliseconds() - start;
+			if (type == game::ASSET_TYPE_STRUCTURED_DATA_DEF && !game::environment::is_sp())
+			{
+				zombies_progression::extend_profile(result);
+			}
 
 			if (type == game::ASSET_TYPE_SCRIPTFILE)
 			{
@@ -72,7 +88,7 @@ namespace fastfiles
 			}
 			else if (type == game::ASSET_TYPE_WEAPON && !game::environment::is_sp())
 			{
-				weapons::hide_unused_grenade_launcher(result);
+				weapons::fix_visuals(result);
 			}
 			else if (type == game::ASSET_TYPE_LOCALIZE_ENTRY && !game::environment::is_sp())
 			{

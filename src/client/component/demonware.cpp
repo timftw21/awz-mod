@@ -5,6 +5,7 @@
 #include <utils/thread.hpp>
 
 #include "game/game.hpp"
+#include "console.hpp"
 #include "game/demonware/servers/lobby_server.hpp"
 #include "game/demonware/servers/auth3_server.hpp"
 #include "game/demonware/servers/stun_server.hpp"
@@ -24,6 +25,24 @@ namespace demonware
 		utils::concurrency::container<std::unordered_map<SOCKET, tcp_server*>> socket_map;
 		server_registry<tcp_server> tcp_servers;
 		server_registry<udp_server> udp_servers;
+
+		void** poll_network_address(void** address)
+		{
+			// The network-info query accepts an unavailable address. Use the
+			// native poll operation instead of sleeping until discovery finishes;
+			// it pumps initialization once and preserves address ownership.
+			*address = nullptr;
+			utils::hook::invoke<bool>(0x1405439C0, address);
+			static bool pending = false;
+			const bool unavailable = !*address;
+			if (unavailable != pending)
+			{
+				pending = unavailable;
+				console::info("[Online] Network address %s; connection discovery continues between frames\n",
+					pending ? "pending" : "available");
+			}
+			return address;
+		}
 
 		tcp_server* find_server(const SOCKET socket)
 		{
@@ -421,6 +440,8 @@ namespace demonware
 			}
 
 			utils::hook::set<uint8_t>(0x140698BB2, 0x0); // CURLOPT_SSL_VERIFYPEER
+			utils::hook::call(0x1404D4521, poll_network_address);
+			console::info("[Online] Network-info queries use nonblocking address discovery\n");
 			utils::hook::set<uint8_t>(0x140698B69, 0xAF); // CURLOPT_SSL_VERIFYHOST
 			utils::hook::set<uint8_t>(0x14088D0E8, 0x0); // HTTPS -> HTTP
 

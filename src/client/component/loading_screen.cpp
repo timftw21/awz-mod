@@ -2,6 +2,7 @@
 #include "loader/component_loader.hpp"
 #include "game/game.hpp"
 #include "console.hpp"
+#include "solo.hpp"
 
 #include <utils/hook.hpp>
 
@@ -11,13 +12,32 @@ namespace loading_screen
 	{
 		utils::hook::detour get_font_handle_hook;
 		utils::hook::detour register_ui_assets_hook;
+		utils::hook::detour get_connection_info_hook;
 		game::Font_s* large_title_font = nullptr;
 		bool reported_title = false;
+		bool reported_connection_info = false;
+
+		const char* get_connection_info_stub(int local_client_num)
+		{
+			// The native connect menu uses connectioninfo() for its status line.
+			// Hide the whole line in Solo, without changing loading or shared strings.
+			if (solo::active())
+			{
+				if (!reported_connection_info)
+				{
+					reported_connection_info = true;
+					console::info("[Loading Screen] Solo connection status text hidden\n");
+				}
+				return "";
+			}
+			return get_connection_info_hook.invoke<const char*>(local_client_num);
+		}
 
 		void register_ui_assets_stub()
 		{
 			large_title_font = nullptr;
 			reported_title = false;
+			reported_connection_info = false;
 			register_ui_assets_hook.invoke<void>();
 			if (game::Com_GetCurrentCoDPlayMode() == game::CODPLAYMODE_ZOMBIES)
 			{
@@ -56,6 +76,7 @@ namespace loading_screen
 			if (game::environment::is_sp()) return;
 			register_ui_assets_hook.create(0x140488930, register_ui_assets_stub);
 			get_font_handle_hook.create(0x14048D9C0, get_font_handle_stub);
+			get_connection_info_hook.create(0x14048D8F0, get_connection_info_stub);
 		}
 	};
 }

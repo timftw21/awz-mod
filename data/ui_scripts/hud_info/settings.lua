@@ -11,13 +11,50 @@ local function on_adjust(option, callback)
 	return option
 end
 
+local function with_numeric_value(slider, dvar, label)
+	local function value_text()
+		return string.format("%s: %g", Engine.Localize(label), Engine.GetDvarFloat(dvar))
+	end
+	slider.properties.button_text = value_text()
+	local bound_element
+	local update_label
+	local function bind_label(element)
+		if bound_element ~= element then
+			bound_element = element
+			update_label = function() element:setText(value_text()) end
+			element:registerDvarHandler(dvar, update_label)
+			print(string.format("[Options] Numeric label attached: %s=%g; builder=%s; content width=%g", dvar,
+				Engine.GetDvarFloat(dvar), element.builtByNewBuilder and "new" or "legacy",
+				slider.properties.content_width or GenericButtonSettings.Common.content_width))
+		end
+		update_label()
+	end
+	-- Look Controls uses buildItemsOld, which ignores postBuildHandler. Its
+	-- menu_create/element_refresh events bind the actual button instead.
+	slider.handlers = slider.handlers or {}
+	for _, event_name in ipairs({ "menu_create", "element_refresh" }) do
+		local previous = slider.handlers[event_name]
+		slider.handlers[event_name] = function(element, event)
+			if previous then previous(element, event) end
+			bind_label(element)
+		end
+	end
+	local post_build = slider.postBuildHandler
+	slider.postBuildHandler = function(element)
+		if post_build then post_build(element) end
+		bind_label(element)
+	end
+	return on_adjust(slider, function()
+		if update_label then update_label() end
+	end)
+end
+
 local function fov_slider()
 	local slider = pcoptions.SliderOptionFactory(
 		"cg_fov", "@PLATFORM_FOV", "@PLATFORM_FOV_OPTION_SUB",
 		SliderBounds.FOV.Min, 120, 1
 	)
 
-	local update_label
 	for _, direction in ipairs({ "button_left_func", "button_right_func" }) do
 		local adjust = slider.properties[direction]
 		slider.properties[direction] = function(element, event)
@@ -26,9 +63,6 @@ local function fov_slider()
 			local value = Engine.GetDvarFloat("cg_fov")
 			-- Advanced Video copies this staging value back when another setting changes.
 			pcoptions.SetDvarValue("ui_cg_fov", value)
-			if update_label then
-				update_label()
-			end
 			if value ~= previous then
 				print(string.format("[FOV] cg_fov=%g, cg_fovScale=%g",
 					value, Engine.GetDvarFloat("cg_fovScale")))
@@ -36,16 +70,45 @@ local function fov_slider()
 		end
 	end
 
-	slider.postBuildHandler = function(element)
-		update_label = function()
-			element:setText(string.format("%s: %g", Engine.Localize("@PLATFORM_FOV"),
-				Engine.GetDvarFloat("cg_fov")))
-		end
-		element:registerDvarHandler("cg_fov", update_label)
-		update_label()
-	end
-	return slider
+	return with_numeric_value(slider, "cg_fov", "@PLATFORM_FOV")
 end
+
+local lookcontrols = require("LUI.LookControls")
+local look_slider = lookcontrols.SliderOptionFactory
+lookcontrols.SliderOptionFactory = function(dvar, label, ...)
+	local slider = look_slider(dvar, label, ...)
+	if dvar ~= "sensitivity" then return slider end
+	-- GradientButton's narrower content area crowds the slider arrows.
+	-- Use the same content width as the PCOptions/FOV slider.
+	slider.properties.content_width = GenericButtonSettings.Common.content_width
+	local previous = Engine.GetDvarFloat(dvar)
+	return with_numeric_value(on_adjust(slider, function()
+		local value = Engine.GetDvarFloat(dvar)
+		if value ~= previous then
+			print(string.format("[Mouse] Sensitivity=%g", value))
+			previous = value
+		end
+	end), dvar, label)
+end
+
+game:addlocalizedstring("LUA_MENU_AUTODETECT_SPEAKERS", "AUTO DETECT")
+local advanced_option = pcoptions.AdvOptionFactory
+pcoptions.AdvOptionFactory = function(dvar, label, description, choices, ...)
+	if dvar ~= "snd_speakerConfig" then
+		return advanced_option(dvar, label, description, choices, ...)
+	end
+	local detected = Engine.GetDvarInt("snd_detectedSpeakerConfig")
+	-- Zero means detection is unavailable. It must not disable every manual
+	-- choice, leaving only Auto Detect selectable. Keep known-device limits.
+	if detected == 0 then
+		for _, choice in ipairs(choices) do choice.enabled = true end
+	end
+	return on_adjust(advanced_option(dvar, label, description, choices, ...), function()
+		print(string.format("[Audio] Speaker config=%d; detected=%d (0 = unknown)",
+			Engine.GetDvarInt(dvar), detected))
+	end)
+end
+print("[Options] Numeric mouse sensitivity enabled; manual speaker configs available when detection is unknown")
 
 local function framerate_option()
 	local limits = { 30, 60, 75, 90, 120, 125, 144, 165, 180, 200, 240, 250, 300, 333, 360, 480 }

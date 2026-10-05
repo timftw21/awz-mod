@@ -18,6 +18,43 @@ namespace stats
 		utils::hook::detour is_item_locked_hook1;
 		utils::hook::detour is_item_locked_hook2;
 		utils::hook::detour is_item_locked_hook3;
+		utils::hook::detour data_lookup_hook;
+
+		// StructuredDataLookup: definition, current type, byte offset, error state.
+		struct data_lookup
+		{
+			const int* definition;
+			const void* type;
+			unsigned int offset;
+			int error;
+		};
+		static_assert(sizeof(data_lookup) == 24);
+
+		bool data_lookup_stub(data_lookup* lookup, const game::scr_string_t* path, int count, int* consumed)
+		{
+			const auto initial = *lookup;
+			const auto result = data_lookup_hook.invoke<bool>(lookup, path, count, consumed);
+			if (!result)
+			{
+				// The stock fatal popup omits the field that failed. Record it before
+				// the caller raises Com_Error, without changing lookup/error behavior.
+				std::string field;
+				for (int i = 0; i < std::clamp(count, 0, 16); ++i)
+				{
+					if (i) field += '.';
+					const auto* name = game::SL_ConvertToString(path[i]);
+					field += name ? name : "<null>";
+				}
+				console::error("[Stats] Persistent lookup failed: version=%d; group offset=%u; path=%s; consumed=%d/%d; error=%d; mode=%d\n",
+					*initial.definition, initial.offset, field.c_str(), *consumed, count, lookup->error,
+					game::Com_GetCurrentCoDPlayMode());
+				void* frames[16]{};
+				const auto depth = CaptureStackBackTrace(0, 16, frames, nullptr);
+				for (USHORT i = 0; i < depth; ++i)
+					console::error("[Stats] Lookup caller %u: %p\n", i, frames[i]);
+			}
+			return result;
+		}
 
 		int is_item_locked_stub1(void* a1, void* a2, void* a3)
 		{
@@ -64,6 +101,9 @@ namespace stats
 			{
 				return;
 			}
+
+			data_lookup_hook.create(0x1404BA3F0, data_lookup_stub);
+			console::info("[Stats] Persistent lookup failure diagnostics enabled\n");
 
 			if (game::environment::is_dedi())
 			{

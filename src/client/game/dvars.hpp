@@ -43,7 +43,6 @@ namespace dvars
 	extern game::dvar_t* master_server_ip;
 	extern game::dvar_t* master_server_port;
 
-	extern game::dvar_t* ui_showBranding;
 	extern game::dvar_t** fs_gameDirVar;
 
 	std::string get_dvar_string(const std::string& dvar);

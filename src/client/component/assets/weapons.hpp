@@ -4,5 +4,5 @@
 
 namespace weapons
 {
-	void hide_unused_grenade_launcher(game::XAssetHeader header);
+	void fix_visuals(game::XAssetHeader header);
 }

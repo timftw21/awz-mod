@@ -98,15 +98,19 @@ local function add_player_list(menu)
 	local background = child_definition(row.children, "memberListButton_background")
 	local text = child_definition(row.children, "memberListButton_textContainer")
 	local name = child_definition(text.children, "memberListButton_gamerTag")
+	local rank = child_definition(text.children, "memberListButton_memberRank")
+	local rank_icon = child_definition(row.children, "memberListButton_rankIcon")
 	name.handlers = nil
 	name.postBuildHandler = nil
 	name.properties = {text = Engine.GetUsernameByController(Engine.GetFirstActiveController())}
 	name.states.default = name.states.local_player
-	text.children = {name}
+	text.children = {name, rank}
 	row.type = "UIElement"
 	row.handlers = nil
-	row.postBuildHandler = nil
-	row.children = {background, text}
+	row.properties.isActiveMemberSlot = true
+	row.properties.isLocalMember = true
+	row.properties.awzSoloController = Engine.GetFirstActiveController()
+	row.children = {background, rank_icon, text}
 	row.states.default.top = header.states.default.height
 	row.states.default.bottom = row.states.default.top + row.properties.buttonHeight
 	screen.type = "UIElement"
@@ -314,6 +318,7 @@ LUI.MenuBuilder.registerType("awz_solo_lobby", function(menu_type, properties)
 	menu:AddButton("@AWZ_CHARACTER_SELECT", function(element, event)
 		LUI.FlowManager.RequestAddMenu(element, "awz_solo_characters", true, event.controller)
 	end)
+	if AWZProgression then AWZProgression.AddLobbyButton(menu) end
 	menu:AddOptionsButton()
 	menu:AddBackButton(function(element, event)
 		game:endsolo()

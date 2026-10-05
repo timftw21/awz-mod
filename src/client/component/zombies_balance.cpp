@@ -140,7 +140,7 @@ namespace zombies_balance
 			}
 		}
 
-		void set_gold_upgrade_camo()
+		void set_upgrade_camos()
 		{
 			auto* table = game::DB_FindXAssetHeader(game::ASSET_TYPE_STRINGTABLE, "mp/zmWeaponLevels.csv", false).stringTable;
 			if (!table || table->columnCount != 4 || table->rowCount != 26)
@@ -150,6 +150,8 @@ namespace zombies_balance
 			}
 			auto& mark10 = table->values[10 * table->columnCount + 1];
 			auto& mark19 = table->values[19 * table->columnCount + 1];
+			auto& mark20 = table->values[20 * table->columnCount + 1];
+			auto& mark25 = table->values[25 * table->columnCount + 1];
 			// mp/camotable.csv identifies camo 15 by MPUI_GOLD and camo_gold_02_col.
 			// Swap complete cells (including lookup hashes), so both the native
 			// display name and GSC use Mk 10 for gold. Repeated map init is safe.
@@ -157,12 +159,20 @@ namespace zombies_balance
 			{
 				std::swap(mark10, mark19);
 			}
-			if (std::strcmp(mark10.string, "15") != 0 || std::strcmp(mark19.string, "25") != 0)
+			// The shipped labels call camo 16 (MPUI_TIGER) Diamond and camo 17
+			// (MPUI_DIAMOND, camo_diamond_02_col) Royalty. Swap their level cells
+			// too, keeping the native Mk 25 label and ammo scaling in sync.
+			if (std::strcmp(mark25.string, "16") == 0 && std::strcmp(mark20.string, "17") == 0)
+			{
+				std::swap(mark25, mark20);
+			}
+			if (std::strcmp(mark10.string, "15") != 0 || std::strcmp(mark19.string, "25") != 0 ||
+				std::strcmp(mark25.string, "17") != 0 || std::strcmp(mark20.string, "16") != 0)
 			{
 				gsc::scr_error("Unexpected Zombies upgrade camo mapping");
 				return;
 			}
-			console::info("[Zombies Balance] Mk 10 mapped to gold camo 15; native label remains Mk 10\n");
+			console::info("[Zombies Balance] Mk 10=gold camo 15; Mk 25=Royalty camo 17; native labels preserved\n");
 		}
 
 		void localized_number()
@@ -230,7 +240,7 @@ namespace zombies_balance
 			gsc::add_function("awz_localizednumber", &localized_number);
 			gsc::add_function("awz_resetammoscales", []
 			{
-				set_gold_upgrade_camo();
+				set_upgrade_camos();
 				hint_trim_reported = false;
 				melee_release_reported = false;
 				melee_return_reported = 0;
